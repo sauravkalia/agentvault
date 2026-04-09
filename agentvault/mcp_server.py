@@ -144,6 +144,10 @@ class MCPServer:
     req_id = request.get("id")
     params = request.get("params", {})
 
+    # Validate method is a string
+    if not isinstance(method, str):
+      return _make_error(req_id, -32600, "Invalid request: method must be a string")
+
     if method == "initialize":
       return _make_response(req_id, {
         "protocolVersion": "2024-11-05",

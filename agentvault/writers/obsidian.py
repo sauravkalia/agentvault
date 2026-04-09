@@ -8,7 +8,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from agentvault.core.redactor import redact_secrets
 from agentvault.core.schema import AgentSession
+
+
+def _relativize_path(file_path: str, working_dir: str) -> str:
+  """Make absolute path relative to working directory for display."""
+  if working_dir and file_path.startswith(working_dir):
+    rel = file_path[len(working_dir):].lstrip("/")
+    return rel or file_path
+  # Fallback: just show filename
+  return Path(file_path).name
 
 
 def _sanitize_path_component(name: str) -> str:
@@ -40,10 +50,10 @@ def _format_exchange_markdown(session: AgentSession) -> str:
   parts = []
   for ex in session.exchanges:
     if ex.role == "human":
-      parts.append(f"### You\n{ex.content}")
+      parts.append(f"### You\n{redact_secrets(ex.content)}")
     elif ex.role == "assistant":
       # Truncate very long assistant responses for readability
-      content = ex.content
+      content = redact_secrets(ex.content)
       if len(content) > 2000:
         content = content[:2000] + "\n\n*[truncated — full content in ChromaDB]*"
 
@@ -95,7 +105,8 @@ def write_session(
 
   files_section = ""
   if session.files_touched:
-    files_list = "\n".join(f"- `{f}`" for f in session.files_touched[:20])
+    rel_files = [_relativize_path(f, session.working_directory) for f in session.files_touched[:20]]
+    files_list = "\n".join(f"- `{f}`" for f in rel_files)
     if len(session.files_touched) > 20:
       files_list += f"\n- *...and {len(session.files_touched) - 20} more*"
     files_section = f"\n## Files Touched\n{files_list}\n"
@@ -126,11 +137,15 @@ def write_daily_digest(
   date: Optional[str] = None,
 ) -> Path:
   """Write a daily digest linking all sessions from a given date."""
-  date_str = date or datetime.now().strftime("%Y-%m-%d")
+  date_str = _sanitize_path_component(date or datetime.now().strftime("%Y-%m-%d"))
 
   digest_dir = vault_path / "agent-history"
   digest_dir.mkdir(parents=True, exist_ok=True)
   filepath = digest_dir / f"{date_str}.md"
+
+  # Ensure resolved path is still under the vault (prevent traversal)
+  if not filepath.resolve().is_relative_to(vault_path.resolve()):
+    raise ValueError(f"Path traversal detected: {filepath}")
 
   lines = [
     "---",
@@ -143,9 +158,10 @@ def write_daily_digest(
   ]
 
   for session in sessions:
-    session_short = session.id[:8]
+    safe_project = _sanitize_path_component(session.project)
+    safe_session = _sanitize_path_component(session.id[:8])
     exchange_count = len([e for e in session.exchanges if e.role == "human"])
-    link = f"[[{session.project}/{date_str}-{session_short}|{session.source}: {session.project}]]"
+    link = f"[[{safe_project}/{date_str}-{safe_session}|{session.source}: {safe_project}]]"
 
     lines.append(f"- {link} — {exchange_count} exchanges")
     if session.git_branch:
