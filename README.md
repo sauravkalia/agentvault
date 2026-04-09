@@ -20,6 +20,7 @@ New session starts → MCP tools → semantic search → relevant context return
 - **Fast** — local ChromaDB with HNSW index, ~30-50ms per search
 - **Private** — everything stays on your machine, zero API calls, zero cloud
 - **Obsidian-native** — browsable markdown files with frontmatter, daily digests, per-project folders
+- **Auto-save** — new Claude Code sessions are automatically ingested via Stop hook
 
 ## Quick Start
 
@@ -27,10 +28,10 @@ New session starts → MCP tools → semantic search → relevant context return
 # Install
 pip install agentvault-memory
 
-# Initialize — auto-detects your AI tools
-agentvault init --obsidian ~/path/to/your/obsidian/vault
+# Initialize — auto-detects AI tools, Obsidian, installs MCP + auto-save hook
+agentvault init
 
-# Ingest all history
+# One-time bulk import of all history
 agentvault ingest
 
 # Search anything
@@ -40,12 +41,18 @@ agentvault search "rate limiting" --source claude-code
 
 # Check status
 agentvault status
-
-# Connect to Claude Code (so new sessions can query your vault)
-agentvault mcp-install
 ```
 
-Restart Claude Code after `mcp-install`. Your AI now has access to your entire history.
+That's it. Two commands to set up, then it runs automatically.
+
+### What `init` does
+
+1. **Detects AI tools** — scans for Claude Code, OpenCode, Codex, Cursor history
+2. **Auto-detects Obsidian** — finds your vault by looking for `.obsidian/` in common locations
+3. **Installs MCP server** — for every detected tool that supports MCP (Claude Code, Cursor, OpenCode)
+4. **Installs auto-save hook** — Claude Code Stop hook that ingests new sessions automatically
+
+No manual `--obsidian` flag or `mcp-install` needed. Everything is auto-detected.
 
 ## What Gets Indexed
 
@@ -60,9 +67,11 @@ From each session, AgentVault extracts:
 | **Timestamps** | Session start/end, per-message |
 | **Tool usage** | Which tools the AI called |
 
+Secrets (API keys, tokens, passwords, private keys, connection strings) are automatically redacted before storage.
+
 ## MCP Tools
 
-When connected via `agentvault mcp-install`, your AI gets these tools:
+After `init`, your AI tools have these search tools available via MCP:
 
 | Tool | What It Does |
 |------|-------------|
@@ -78,7 +87,7 @@ Your AI calls these automatically when you ask questions like:
 
 ## Obsidian Integration
 
-AgentVault writes browsable markdown to your Obsidian vault:
+If an Obsidian vault is detected (or provided via `--obsidian`), AgentVault writes browsable markdown:
 
 ```
 obsidian-vault/
@@ -90,17 +99,23 @@ obsidian-vault/
       2026-04-08-aa20d038.md
 ```
 
-Each session file has YAML frontmatter (source, project, date, branch, tags) — searchable and linkable in Obsidian.
+Each session file has YAML frontmatter (source, project, date, branch, tags) — searchable and linkable in Obsidian. No Obsidian? No problem — it's optional. ChromaDB search works without it.
 
 ## Supported Tools
 
-| Tool | Status | History Location |
-|------|--------|-----------------|
-| **Claude Code** | **Supported** | `~/.claude/projects/` |
-| **OpenCode** | **Supported** | `~/.local/state/opencode/` |
-| **Codex (OpenAI)** | **Supported** | `~/.codex/sessions/` |
-| **Cursor** | **Supported** | `~/Library/Application Support/Cursor/` (SQLite) |
-| ChatGPT | Planned (manual export) | TBD |
+| Tool | History | MCP | Auto-Save Hook |
+|------|---------|-----|----------------|
+| **Claude Code** | `~/.claude/projects/` (JSONL) | Yes | Yes |
+| **OpenCode** | `~/.local/state/opencode/` (JSONL) | Yes | — |
+| **Codex (OpenAI)** | `~/.codex/sessions/` (JSONL) | — | — |
+| **Cursor** | `~/Library/Application Support/Cursor/` (SQLite) | Yes | — |
+| ChatGPT | Planned (manual export) | — | — |
+
+## Auto-Save (Future Sessions)
+
+After `init`, a Claude Code Stop hook is installed that runs `agentvault ingest --source claude-code` after every session ends. New conversations are automatically indexed — no manual `ingest` needed.
+
+For other tools, run `agentvault ingest` periodically or after significant work.
 
 ## Adding a New Adapter
 
@@ -139,16 +154,28 @@ agentvault/
   core/
     schema.py             ← AgentSession, Exchange, Chunk
     store.py              ← ChromaDB wrapper
-    ingester.py           ← Session → chunks
+    ingester.py           ← Session → chunks (with secret redaction)
+    redactor.py           ← Secret pattern detection (15 patterns)
   adapters/
     base.py               ← BaseAdapter interface
     claude_code.py        ← Claude Code JSONL parser
+    opencode.py           ← OpenCode prompt history parser
+    codex.py              ← Codex event-driven JSONL parser
+    cursor.py             ← Cursor SQLite DB parser
   writers/
     obsidian.py           ← Markdown + daily digests
     chromadb_writer.py    ← Batch ingestion + dedup
-  hooks/
-    auto_save.sh          ← Post-session sync hook
 ```
+
+## Security
+
+- Secret redaction (API keys, tokens, passwords, private keys, connection strings) on all content before storage
+- MCP server input validation (query length limits, top_k capped at 50, type checking)
+- Path traversal protection in Obsidian writer
+- ChromaDB + vault directories set to `0700` (owner-only)
+- Obsidian files written with `0600` permissions
+- Atomic config file writes with backups
+- No telemetry, no cloud, no data leaves your machine
 
 ## Context Efficiency
 
