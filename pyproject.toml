@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentvault"
+name = "agentvault-memory"
 version = "0.1.0"
 description = "Unified memory layer that consolidates history from all your AI coding agents — searchable by humans (Obsidian) and by AI (MCP)."
 readme = "README.md"
@@ -40,6 +40,7 @@ agentvault = "agentvault.cli:cli"
 Homepage = "https://github.com/sauravkalia/agentvault"
 Repository = "https://github.com/sauravkalia/agentvault"
 Issues = "https://github.com/sauravkalia/agentvault/issues"
+Documentation = "https://github.com/sauravkalia/agentvault#readme"
 
 [tool.ruff]
 line-length = 100

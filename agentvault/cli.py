@@ -15,7 +15,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(package_name="agentvault")
+@click.version_option(package_name="agentvault-memory")
 def cli():
   """AgentVault — Unified memory for AI coding agents."""
   pass

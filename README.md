@@ -25,7 +25,7 @@ New session starts → MCP tools → semantic search → relevant context return
 
 ```bash
 # Install
-pip install -e .
+pip install agentvault-memory
 
 # Initialize — auto-detects your AI tools
 agentvault init --obsidian ~/path/to/your/obsidian/vault
