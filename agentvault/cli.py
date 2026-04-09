@@ -14,39 +14,21 @@ from agentvault.config import DEFAULT_VAULT_DIR, load_config, save_config
 console = Console()
 
 
-def _install_mcp_server():
-  """Install AgentVault MCP server in Claude Code settings."""
+def _atomic_json_write(filepath: Path, data: dict):
+  """Write JSON atomically — temp file + rename."""
   import os
-  import shutil
   import tempfile
 
-  python_path = shutil.which("python3") or shutil.which("python") or "python"
-  claude_settings = Path.home() / ".claude" / "settings.json"
-
-  if claude_settings.exists():
-    with open(claude_settings) as f:
-      settings = json.load(f)
-    backup_path = claude_settings.with_suffix(".json.bak")
-    shutil.copy2(str(claude_settings), str(backup_path))
-  else:
-    settings = {}
-
-  mcp_servers = settings.setdefault("mcpServers", {})
-  mcp_servers["agentvault"] = {
-    "command": python_path,
-    "args": ["-m", "agentvault.mcp_server"],
-  }
-
-  claude_settings.parent.mkdir(parents=True, exist_ok=True)
+  filepath.parent.mkdir(parents=True, exist_ok=True)
   fd, tmp_path = tempfile.mkstemp(
-    dir=str(claude_settings.parent),
+    dir=str(filepath.parent),
     suffix=".json",
-    prefix=".settings_tmp_",
+    prefix=".tmp_",
   )
   try:
     with os.fdopen(fd, "w") as f:
-      json.dump(settings, f, indent=2)
-    os.replace(tmp_path, str(claude_settings))
+      json.dump(data, f, indent=2)
+    os.replace(tmp_path, str(filepath))
   except Exception:
     try:
       os.unlink(tmp_path)
@@ -55,20 +37,95 @@ def _install_mcp_server():
     raise
 
 
+def _load_json_with_backup(filepath: Path) -> dict:
+  """Load JSON file and create a backup. Returns empty dict if not found."""
+  import shutil
+
+  if filepath.exists():
+    with open(filepath) as f:
+      data = json.load(f)
+    backup = filepath.with_suffix(filepath.suffix + ".bak")
+    shutil.copy2(str(filepath), str(backup))
+    return data
+  return {}
+
+
+def _install_mcp_for_tool(tool_name: str) -> bool:
+  """Install AgentVault MCP server for a specific tool. Returns True if installed."""
+  import shutil
+
+  python_path = shutil.which("python3") or shutil.which("python") or "python"
+  mcp_entry = {
+    "command": python_path,
+    "args": ["-m", "agentvault.mcp_server"],
+  }
+
+  if tool_name == "claude-code":
+    config_path = Path.home() / ".claude" / "settings.json"
+    if not config_path.parent.exists():
+      return False
+    settings = _load_json_with_backup(config_path)
+    mcp_servers = settings.setdefault("mcpServers", {})
+    mcp_servers["agentvault"] = mcp_entry
+    _atomic_json_write(config_path, settings)
+    return True
+
+  elif tool_name == "cursor":
+    config_path = Path.home() / ".cursor" / "mcp.json"
+    if not config_path.parent.exists():
+      return False
+    settings = _load_json_with_backup(config_path)
+    mcp_servers = settings.setdefault("mcpServers", {})
+    mcp_servers["agentvault"] = mcp_entry
+    _atomic_json_write(config_path, settings)
+    return True
+
+  elif tool_name == "opencode":
+    config_path = Path.home() / ".config" / "opencode" / "opencode.json"
+    if not config_path.exists():
+      return False
+    settings = _load_json_with_backup(config_path)
+    mcp_servers = settings.setdefault("mcpServers", {})
+    mcp_servers["agentvault"] = {
+      "type": "stdio",
+      "command": python_path,
+      "args": ["-m", "agentvault.mcp_server"],
+    }
+    _atomic_json_write(config_path, settings)
+    return True
+
+  return False
+
+
+def _get_mcp_supported_tools() -> list[tuple[str, str]]:
+  """Return list of (tool_name, config_path) for tools that support MCP."""
+  tools = []
+  claude = Path.home() / ".claude" / "settings.json"
+  if claude.parent.exists():
+    tools.append(("claude-code", str(claude)))
+
+  cursor = Path.home() / ".cursor" / "mcp.json"
+  if cursor.parent.exists():
+    tools.append(("cursor", str(cursor)))
+
+  opencode = Path.home() / ".config" / "opencode" / "opencode.json"
+  if opencode.exists():
+    tools.append(("opencode", str(opencode)))
+
+  return tools
+
+
 def _install_auto_save_hook():
   """Install Claude Code Stop hook to auto-ingest after each session."""
-  import os
   import shutil
-  import tempfile
 
   agentvault_cmd = shutil.which("agentvault") or "agentvault"
   claude_settings = Path.home() / ".claude" / "settings.json"
 
-  if claude_settings.exists():
-    with open(claude_settings) as f:
-      settings = json.load(f)
-  else:
-    settings = {}
+  if not claude_settings.parent.exists():
+    return
+
+  settings = _load_json_with_backup(claude_settings)
 
   hooks = settings.setdefault("hooks", {})
   stop_hooks = hooks.setdefault("Stop", [])
@@ -88,22 +145,7 @@ def _install_auto_save_hook():
     }],
   })
 
-  claude_settings.parent.mkdir(parents=True, exist_ok=True)
-  fd, tmp_path = tempfile.mkstemp(
-    dir=str(claude_settings.parent),
-    suffix=".json",
-    prefix=".settings_tmp_",
-  )
-  try:
-    with os.fdopen(fd, "w") as f:
-      json.dump(settings, f, indent=2)
-    os.replace(tmp_path, str(claude_settings))
-  except Exception:
-    try:
-      os.unlink(tmp_path)
-    except OSError:
-      pass
-    raise
+  _atomic_json_write(claude_settings, settings)
 
 
 @click.group()
@@ -179,13 +221,18 @@ def init(obsidian: str | None):
 
   console.print(f"\n  Config saved to: {DEFAULT_VAULT_DIR / 'config.json'}")
 
-  # Auto-install MCP server for Claude Code
+  # Auto-install MCP server for all detected tools
   console.print("\n  [bold]MCP Server:[/bold]")
-  try:
-    _install_mcp_server()
-    console.print("    [green]\u2713[/green] Installed for Claude Code")
-  except Exception as e:
-    console.print(f"    [yellow]![/yellow] Could not install: {e}")
+  mcp_tools = _get_mcp_supported_tools()
+  if mcp_tools:
+    for tool_name, config_path in mcp_tools:
+      try:
+        _install_mcp_for_tool(tool_name)
+        console.print(f"    [green]\u2713[/green] {tool_name}")
+      except Exception as e:
+        console.print(f"    [yellow]![/yellow] {tool_name}: {e}")
+  else:
+    console.print("    [dim]\u2717 No MCP-compatible tools found[/dim]")
     console.print("    [dim]  Run manually with: agentvault mcp-install[/dim]")
 
   # Auto-install auto-save hook
@@ -357,14 +404,27 @@ def status():
 
 @cli.command(name="mcp-install")
 def mcp_install():
-  """Install AgentVault MCP server + auto-save hook in Claude Code."""
-  _install_mcp_server()
-  console.print("\n  [green]\u2713[/green] MCP server installed")
+  """Install AgentVault MCP server + auto-save hook."""
+  console.print("\n  [bold]Installing MCP server:[/bold]")
+  mcp_tools = _get_mcp_supported_tools()
+  if mcp_tools:
+    for tool_name, config_path in mcp_tools:
+      try:
+        _install_mcp_for_tool(tool_name)
+        console.print(f"    [green]\u2713[/green] {tool_name}")
+      except Exception as e:
+        console.print(f"    [yellow]![/yellow] {tool_name}: {e}")
+  else:
+    console.print("    [dim]No MCP-compatible tools found[/dim]")
 
-  _install_auto_save_hook()
-  console.print("  [green]\u2713[/green] Auto-save hook installed")
+  console.print("\n  [bold]Installing auto-save hook:[/bold]")
+  try:
+    _install_auto_save_hook()
+    console.print("    [green]\u2713[/green] Claude Code stop hook installed")
+  except Exception as e:
+    console.print(f"    [yellow]![/yellow] {e}")
 
-  console.print("  Restart Claude Code to activate.\n")
+  console.print("\n  Restart your AI tools to activate.\n")
 
 
 if __name__ == "__main__":
