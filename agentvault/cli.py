@@ -53,17 +53,31 @@ def init(obsidian: str | None):
     else:
       console.print(f"    [dim]\u2717 {adapter.name}: not found[/dim]")
 
-  # Obsidian
+  # Obsidian — auto-detect if not provided
+  if not obsidian:
+    common_paths = [
+      Path.home() / "Documents" / "ObsidianVault",
+      Path.home() / "Documents" / "Obsidian",
+      Path.home() / "Documents" / "Obsidian Vault",
+      Path.home() / "ObsidianVault",
+      Path.home() / "Obsidian",
+    ]
+    for candidate in common_paths:
+      if (candidate / ".obsidian").exists():
+        obsidian = str(candidate)
+        break
+
+  console.print("\n  [bold]Obsidian:[/bold]")
   if obsidian:
     obsidian_path = Path(obsidian).expanduser().resolve()
     if obsidian_path.exists():
-      console.print(f"\n  [green]\u2713[/green] Obsidian vault: {obsidian_path}")
+      console.print(f"    [green]\u2713[/green] Vault found: {obsidian_path}")
     else:
-      console.print(f"\n  [yellow]![/yellow] Obsidian path doesn't exist: {obsidian_path}")
+      console.print(f"    [yellow]![/yellow] Path doesn't exist: {obsidian_path}")
       obsidian = None
-  else:
-    console.print("\n  [dim]Obsidian: not configured (optional)[/dim]")
-    console.print("  [dim]  Add later with: agentvault init --obsidian ~/path/to/vault[/dim]")
+  if not obsidian:
+    console.print("    [dim]\u2717 Not found (optional)[/dim]")
+    console.print("    [dim]  Add manually with: agentvault init --obsidian ~/path/to/vault[/dim]")
 
   # Save config
   config = load_config()
