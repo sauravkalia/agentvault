@@ -97,9 +97,9 @@ Each session file has YAML frontmatter (source, project, date, branch, tags) —
 | Tool | Status | History Location |
 |------|--------|-----------------|
 | **Claude Code** | **Supported** | `~/.claude/projects/` |
-| OpenCode | Planned | `~/.opencode/` |
-| Codex | Planned | TBD |
-| Cursor | Planned | TBD |
+| **OpenCode** | **Supported** | `~/.local/state/opencode/` |
+| **Codex (OpenAI)** | **Supported** | `~/.codex/sessions/` |
+| **Cursor** | **Supported** | `~/Library/Application Support/Cursor/` (SQLite) |
 | ChatGPT | Planned (manual export) | TBD |
 
 ## Adding a New Adapter

@@ -1,0 +1,65 @@
+{
+  "_v": 5,
+  "composerId": "test-cursor-001",
+  "name": "Add dark mode support",
+  "richText": "",
+  "hasLoaded": true,
+  "text": "",
+  "conversation": [
+    {
+      "type": 1,
+      "text": "Can you add dark mode support to the app?",
+      "bubbleId": "bubble-001",
+      "suggestedCodeBlocks": [],
+      "relevantFiles": [],
+      "capabilitiesRan": [],
+      "multiFileLinterErrors": [],
+      "diffHistories": [],
+      "recentLocationsHistory": [],
+      "isAgentic": false
+    },
+    {
+      "type": 2,
+      "text": "I'll add dark mode support using CSS custom properties and a toggle component. This approach works across the entire app without needing to modify each component individually.",
+      "bubbleId": "bubble-002",
+      "suggestedCodeBlocks": [],
+      "relevantFiles": ["src/styles/globals.css", "src/components/ThemeToggle.tsx"],
+      "capabilitiesRan": [],
+      "multiFileLinterErrors": [],
+      "diffHistories": [],
+      "recentLocationsHistory": [],
+      "isAgentic": true
+    },
+    {
+      "type": 1,
+      "text": "Can you also add system preference detection?",
+      "bubbleId": "bubble-003",
+      "suggestedCodeBlocks": [],
+      "relevantFiles": [],
+      "capabilitiesRan": [],
+      "multiFileLinterErrors": [],
+      "diffHistories": [],
+      "recentLocationsHistory": [],
+      "isAgentic": false
+    },
+    {
+      "type": 2,
+      "text": "I'll use the prefers-color-scheme media query to detect the system preference and set the initial theme accordingly.",
+      "bubbleId": "bubble-004",
+      "suggestedCodeBlocks": [],
+      "relevantFiles": [],
+      "capabilitiesRan": [],
+      "multiFileLinterErrors": [],
+      "diffHistories": [],
+      "recentLocationsHistory": [],
+      "isAgentic": true
+    }
+  ],
+  "status": "completed",
+  "context": {},
+  "createdAt": 1704067200000,
+  "lastUpdatedAt": 1704070800000,
+  "unifiedMode": "agent",
+  "forceMode": "edit",
+  "modelConfig": {"modelName": "claude-4-sonnet", "maxMode": false}
+}

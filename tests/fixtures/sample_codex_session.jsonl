@@ -1,0 +1,7 @@
+{"timestamp":"2026-01-15T10:00:00.000Z","type":"session_meta","payload":{"id":"test-codex-001","timestamp":"2026-01-15T10:00:00.000Z","cwd":"/Users/test/projects/webapp","originator":"codex_cli","cli_version":"1.0.0","git":{"commit_hash":"abc123def","branch":"feature/auth","repository_url":"https://github.com/test/webapp.git"}}}
+{"timestamp":"2026-01-15T10:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\n  <cwd>/Users/test/projects/webapp</cwd>\n</environment_context>"}]}}
+{"timestamp":"2026-01-15T10:00:02.000Z","type":"event_msg","payload":{"type":"user_message","message":"Can you add JWT authentication to the Express server?"}}
+{"timestamp":"2026-01-15T10:00:10.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I'll add JWT authentication to your Express server. Let me create the middleware and auth routes."}]}}
+{"timestamp":"2026-01-15T10:00:15.000Z","type":"function_call","payload":{"name":"shell","arguments":"{\"cmd\":\"npm install jsonwebtoken bcryptjs\"}"}}
+{"timestamp":"2026-01-15T10:01:00.000Z","type":"event_msg","payload":{"type":"user_message","message":"Great, now add refresh token support"}}
+{"timestamp":"2026-01-15T10:01:10.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I'll add refresh token rotation with a Redis-backed token store."}]}}

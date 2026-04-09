@@ -26,6 +26,9 @@ def cli():
 def init(obsidian: str | None):
   """Initialize AgentVault and auto-detect AI tools."""
   from agentvault.adapters.claude_code import ClaudeCodeAdapter
+  from agentvault.adapters.codex import CodexAdapter
+  from agentvault.adapters.cursor import CursorAdapter
+  from agentvault.adapters.opencode import OpenCodeAdapter
 
   console.print("\n[bold]AgentVault Init[/bold]\n")
 
@@ -35,7 +38,12 @@ def init(obsidian: str | None):
   console.print(f"  Vault directory: {DEFAULT_VAULT_DIR}")
 
   # Auto-detect tools
-  adapters = [ClaudeCodeAdapter()]
+  adapters = [
+    ClaudeCodeAdapter(),
+    OpenCodeAdapter(),
+    CodexAdapter(),
+    CursorAdapter(),
+  ]
 
   console.print("\n  [bold]Detecting AI tools:[/bold]")
   for adapter in adapters:
@@ -73,6 +81,9 @@ def init(obsidian: str | None):
 def ingest(source: str | None, max_tokens: int):
   """Ingest conversation history from detected AI tools."""
   from agentvault.adapters.claude_code import ClaudeCodeAdapter
+  from agentvault.adapters.codex import CodexAdapter
+  from agentvault.adapters.cursor import CursorAdapter
+  from agentvault.adapters.opencode import OpenCodeAdapter
   from agentvault.core.store import VaultStore
   from agentvault.writers.chromadb_writer import ingest_sessions
   from agentvault.writers.obsidian import write_daily_digest, write_session
@@ -80,7 +91,12 @@ def ingest(source: str | None, max_tokens: int):
   config = load_config()
   store = VaultStore()
 
-  adapters = [ClaudeCodeAdapter()]
+  adapters = [
+    ClaudeCodeAdapter(),
+    OpenCodeAdapter(),
+    CodexAdapter(),
+    CursorAdapter(),
+  ]
   if source:
     adapters = [a for a in adapters if a.name == source]
 
