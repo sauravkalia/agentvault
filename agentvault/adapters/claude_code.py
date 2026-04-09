@@ -167,9 +167,14 @@ class ClaudeCodeAdapter(BaseAdapter):
             files_touched.add(tc.input["file_path"])
 
         if text.strip() or tool_calls:
+          if text.strip():
+            msg_content = text.strip()
+          else:
+            tool_names = ", ".join(tc.name for tc in tool_calls)
+            msg_content = f"[Used tools: {tool_names}]"
           exchanges.append(Exchange(
             role="assistant",
-            content=text.strip() if text.strip() else f"[Used tools: {', '.join(tc.name for tc in tool_calls)}]",
+            content=msg_content,
             timestamp=timestamp,
             tool_calls=tool_calls,
           ))

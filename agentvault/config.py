@@ -64,7 +64,7 @@ def _validate_config(config: dict[str, Any]) -> dict[str, Any]:
 
     # Validate path values don't contain traversal
     if key in ("vault_dir", "chromadb_dir", "obsidian_vault") and isinstance(value, str):
-      resolved = Path(value).expanduser().resolve()
+      Path(value).expanduser().resolve()
       # Ensure it's under home or an absolute path (no relative shenanigans)
       if ".." in Path(value).parts:
         validated[key] = defaults.get(key)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 from agentvault.core.redactor import redact_secrets
 from agentvault.core.schema import AgentSession, Chunk, Exchange
@@ -60,7 +59,10 @@ def chunk_session(
 
     # If adding this exchange exceeds limit, flush current chunk
     if current_texts and (current_tokens + tokens) > max_tokens:
-      chunk_content = f"{header}\n\n" + "\n\n".join(current_texts) if chunk_index == 0 else "\n\n".join(current_texts)
+      if chunk_index == 0:
+        chunk_content = f"{header}\n\n" + "\n\n".join(current_texts)
+      else:
+        chunk_content = "\n\n".join(current_texts)
       chunk_id = _make_chunk_id(session.id, chunk_index)
 
       chunks.append(Chunk(
@@ -82,7 +84,10 @@ def chunk_session(
 
   # Flush remaining
   if current_texts:
-    chunk_content = f"{header}\n\n" + "\n\n".join(current_texts) if chunk_index == 0 else "\n\n".join(current_texts)
+    if chunk_index == 0:
+      chunk_content = f"{header}\n\n" + "\n\n".join(current_texts)
+    else:
+      chunk_content = "\n\n".join(current_texts)
     chunk_id = _make_chunk_id(session.id, chunk_index)
 
     chunks.append(Chunk(

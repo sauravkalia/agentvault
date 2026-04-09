@@ -9,7 +9,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from agentvault.config import load_config, save_config, DEFAULT_VAULT_DIR
+from agentvault.config import DEFAULT_VAULT_DIR, load_config, save_config
 
 console = Console()
 
@@ -54,8 +54,8 @@ def init(obsidian: str | None):
       console.print(f"\n  [yellow]![/yellow] Obsidian path doesn't exist: {obsidian_path}")
       obsidian = None
   else:
-    console.print(f"\n  [dim]Obsidian: not configured (optional)[/dim]")
-    console.print(f"  [dim]  Add later with: agentvault init --obsidian ~/path/to/vault[/dim]")
+    console.print("\n  [dim]Obsidian: not configured (optional)[/dim]")
+    console.print("  [dim]  Add later with: agentvault init --obsidian ~/path/to/vault[/dim]")
 
   # Save config
   config = load_config()
@@ -75,7 +75,7 @@ def ingest(source: str | None, max_tokens: int):
   from agentvault.adapters.claude_code import ClaudeCodeAdapter
   from agentvault.core.store import VaultStore
   from agentvault.writers.chromadb_writer import ingest_sessions
-  from agentvault.writers.obsidian import write_session, write_daily_digest
+  from agentvault.writers.obsidian import write_daily_digest, write_session
 
   config = load_config()
   store = VaultStore()
@@ -104,7 +104,7 @@ def ingest(source: str | None, max_tokens: int):
     return
 
   # Write to ChromaDB
-  console.print(f"\n  Writing to ChromaDB...")
+  console.print("\n  Writing to ChromaDB...")
   result = ingest_sessions(all_sessions, store, max_tokens=max_tokens)
   console.print(
     f"    [green]\u2713[/green] {result['chunks_added']} chunks indexed "
@@ -138,7 +138,7 @@ def ingest(source: str | None, max_tokens: int):
 
     console.print(f"    [green]\u2713[/green] {written} session files written")
 
-  console.print(f"\n  [bold green]Done.[/bold green]\n")
+  console.print("\n  [bold green]Done.[/bold green]\n")
 
 
 @cli.command()
