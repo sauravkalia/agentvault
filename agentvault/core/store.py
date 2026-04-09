@@ -25,7 +25,9 @@ class VaultStore:
     collection_name: str = DEFAULT_COLLECTION_NAME,
   ):
     self.persist_dir = persist_dir or DEFAULT_CHROMADB_DIR
-    self.persist_dir.mkdir(parents=True, exist_ok=True)
+    self.persist_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Ensure restrictive permissions even if directory already existed
+    self.persist_dir.chmod(0o700)
 
     self.client = chromadb.PersistentClient(
       path=str(self.persist_dir),

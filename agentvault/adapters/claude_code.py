@@ -184,6 +184,12 @@ class ClaudeCodeAdapter(BaseAdapter):
     if cwd:
       project = _extract_project_name(cwd)
 
+    # Store relative path instead of absolute to avoid leaking user directory structure
+    try:
+      relative_path = str(path.relative_to(self.history_path))
+    except ValueError:
+      relative_path = path.name
+
     return AgentSession(
       id=session_id or path.stem,
       source="claude-code",
@@ -195,7 +201,7 @@ class ClaudeCodeAdapter(BaseAdapter):
       git_branch=git_branch or None,
       files_touched=sorted(files_touched),
       metadata={
-        "jsonl_path": str(path),
+        "session_file": relative_path,
         "project_slug": project_slug,
       },
     )

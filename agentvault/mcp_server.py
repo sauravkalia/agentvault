@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
+import traceback
 from typing import Any
 
 from agentvault.config import load_config
@@ -19,6 +20,11 @@ from agentvault.core.store import VaultStore
 # MCP protocol constants
 JSONRPC_VERSION = "2.0"
 
+# Security limits
+MAX_TOP_K = 50
+MAX_QUERY_LENGTH = 10_000
+MAX_LINE_LENGTH = 1_000_000  # 1MB per line
+
 
 def _make_response(id: Any, result: Any) -> dict:
   return {"jsonrpc": JSONRPC_VERSION, "id": id, "result": result}
@@ -26,6 +32,26 @@ def _make_response(id: Any, result: Any) -> dict:
 
 def _make_error(id: Any, code: int, message: str) -> dict:
   return {"jsonrpc": JSONRPC_VERSION, "id": id, "error": {"code": code, "message": message}}
+
+
+def _validate_string(value: Any, name: str, max_length: int = MAX_QUERY_LENGTH) -> str:
+  """Validate and sanitize a string input."""
+  if not isinstance(value, str):
+    raise ValueError(f"{name} must be a string")
+  if len(value) > max_length:
+    raise ValueError(f"{name} exceeds maximum length of {max_length}")
+  return value
+
+
+def _validate_top_k(value: Any) -> int:
+  """Validate top_k is a reasonable positive integer."""
+  if value is None:
+    return 5
+  try:
+    k = int(value)
+  except (TypeError, ValueError):
+    return 5
+  return max(1, min(k, MAX_TOP_K))
 
 
 def _get_tools() -> list[dict]:
@@ -39,6 +65,7 @@ def _get_tools() -> list[dict]:
           "query": {
             "type": "string",
             "description": "What to search for — natural language query",
+            "maxLength": MAX_QUERY_LENGTH,
           },
           "project": {
             "type": "string",
@@ -50,8 +77,9 @@ def _get_tools() -> list[dict]:
           },
           "top_k": {
             "type": "integer",
-            "description": "Number of results to return (default: 5)",
+            "description": f"Number of results to return (default: 5, max: {MAX_TOP_K})",
             "default": 5,
+            "maximum": MAX_TOP_K,
           },
         },
         "required": ["query"],
@@ -84,6 +112,7 @@ def _get_tools() -> list[dict]:
           "query": {
             "type": "string",
             "description": "The problem or pattern to search for across all projects",
+            "maxLength": MAX_QUERY_LENGTH,
           },
         },
         "required": ["query"],
@@ -143,21 +172,35 @@ class MCPServer:
 
     try:
       if tool_name == "vault_search":
+        query = _validate_string(args.get("query", ""), "query")
+        top_k = _validate_top_k(args.get("top_k"))
+        project = args.get("project")
+        source = args.get("source")
+        if project:
+          _validate_string(project, "project", max_length=200)
+        if source:
+          _validate_string(source, "source", max_length=100)
+
         results = self.store.search(
-          query=args["query"],
-          top_k=args.get("top_k", 5),
-          project=args.get("project"),
-          source=args.get("source"),
+          query=query,
+          top_k=top_k,
+          project=project,
+          source=source,
         )
         text = self._format_search_results(results)
 
       elif tool_name == "vault_project_context":
-        query = args.get("topic", f"recent work on {args['project']}")
-        results = self.store.search(query=query, top_k=8, project=args["project"])
+        project = _validate_string(args.get("project", ""), "project", max_length=200)
+        topic = args.get("topic")
+        if topic:
+          _validate_string(topic, "topic")
+        query = topic or f"recent work on {project}"
+        results = self.store.search(query=query, top_k=8, project=project)
         text = self._format_search_results(results)
 
       elif tool_name == "vault_cross_reference":
-        results = self.store.search(query=args["query"], top_k=10)
+        query = _validate_string(args.get("query", ""), "query")
+        results = self.store.search(query=query, top_k=10)
         text = self._format_search_results(results)
 
       elif tool_name == "vault_status":
@@ -176,9 +219,17 @@ class MCPServer:
         "content": [{"type": "text", "text": text}],
       })
 
-    except Exception as e:
+    except ValueError as e:
+      # Validation errors are safe to return
       return _make_response(req_id, {
-        "content": [{"type": "text", "text": f"Error: {e}"}],
+        "content": [{"type": "text", "text": f"Validation error: {e}"}],
+        "isError": True,
+      })
+    except Exception:
+      # Log full error to stderr, return generic message to client
+      print(f"MCP tool error: {traceback.format_exc()}", file=sys.stderr)
+      return _make_response(req_id, {
+        "content": [{"type": "text", "text": "An internal error occurred while processing the request."}],
         "isError": True,
       })
 
@@ -205,13 +256,17 @@ class MCPServer:
   def run(self):
     """Run the MCP server on stdio."""
     for line in sys.stdin:
+      # Enforce max line length to prevent OOM
+      if len(line) > MAX_LINE_LENGTH:
+        continue
+
       line = line.strip()
       if not line:
         continue
 
       try:
         request = json.loads(line)
-      except json.JSONDecodeError:
+      except (json.JSONDecodeError, MemoryError):
         continue
 
       response = self.handle_request(request)

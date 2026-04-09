@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from agentvault.core.schema import AgentSession
+
+
+def _sanitize_path_component(name: str) -> str:
+  """Remove path separators, null bytes, and '..' from a path component."""
+  return re.sub(r'[^\w\-.]', '_', name).strip('.')
 
 
 def _format_frontmatter(session: AgentSession) -> str:
@@ -60,14 +67,19 @@ def write_session(
   Returns the path to the created file.
   """
   date_str = session.started_at[:10] if session.started_at else "unknown"
-  session_short = session.id[:8]
+  safe_project = _sanitize_path_component(session.project)
+  safe_session = _sanitize_path_component(session.id[:8])
 
   # Create directory structure
-  project_dir = vault_path / "agent-history" / session.project
+  project_dir = vault_path / "agent-history" / safe_project
   project_dir.mkdir(parents=True, exist_ok=True)
 
-  filename = f"{date_str}-{session_short}.md"
+  filename = f"{date_str}-{safe_session}.md"
   filepath = project_dir / filename
+
+  # Ensure resolved path is still under the vault (prevent traversal)
+  if not filepath.resolve().is_relative_to(vault_path.resolve()):
+    raise ValueError(f"Path traversal detected: {filepath}")
 
   # Build markdown content
   frontmatter = _format_frontmatter(session)
@@ -99,7 +111,12 @@ def write_session(
     transcript,
   ]))
 
-  filepath.write_text(content, encoding="utf-8")
+  # Write with restrictive permissions (owner-only read/write)
+  fd = os.open(str(filepath), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+  try:
+    os.write(fd, content.encode("utf-8"))
+  finally:
+    os.close(fd)
   return filepath
 
 
@@ -136,5 +153,10 @@ def write_daily_digest(
     if session.summary:
       lines.append(f"  - {session.summary}")
 
-  filepath.write_text("\n".join(lines), encoding="utf-8")
+  # Write with restrictive permissions (owner-only read/write)
+  fd = os.open(str(filepath), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+  try:
+    os.write(fd, "\n".join(lines).encode("utf-8"))
+  finally:
+    os.close(fd)
   return filepath

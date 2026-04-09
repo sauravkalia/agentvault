@@ -29,8 +29,9 @@ def init(obsidian: str | None):
 
   console.print("\n[bold]AgentVault Init[/bold]\n")
 
-  # Create vault directory
-  DEFAULT_VAULT_DIR.mkdir(parents=True, exist_ok=True)
+  # Create vault directory with restrictive permissions
+  DEFAULT_VAULT_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+  DEFAULT_VAULT_DIR.chmod(0o700)
   console.print(f"  Vault directory: {DEFAULT_VAULT_DIR}")
 
   # Auto-detect tools
@@ -52,6 +53,9 @@ def init(obsidian: str | None):
     else:
       console.print(f"\n  [yellow]![/yellow] Obsidian path doesn't exist: {obsidian_path}")
       obsidian = None
+  else:
+    console.print(f"\n  [dim]Obsidian: not configured (optional)[/dim]")
+    console.print(f"  [dim]  Add later with: agentvault init --obsidian ~/path/to/vault[/dim]")
 
   # Save config
   config = load_config()
@@ -211,9 +215,13 @@ def status():
 @cli.command(name="mcp-install")
 def mcp_install():
   """Install AgentVault as an MCP server in Claude Code."""
+  import os
   import shutil
+  import tempfile
 
   python_path = shutil.which("python3") or shutil.which("python") or "python"
+
+  console.print(f"\n  Python path: {python_path}")
 
   # Claude Code settings path
   claude_settings = Path.home() / ".claude" / "settings.json"
@@ -221,6 +229,10 @@ def mcp_install():
   if claude_settings.exists():
     with open(claude_settings) as f:
       settings = json.load(f)
+    # Backup existing settings
+    backup_path = claude_settings.with_suffix(".json.bak")
+    shutil.copy2(str(claude_settings), str(backup_path))
+    console.print(f"  Backed up existing settings to {backup_path}")
   else:
     settings = {}
 
@@ -230,11 +242,26 @@ def mcp_install():
     "args": ["-m", "agentvault.mcp_server"],
   }
 
+  # Atomic write — write to temp file, then rename
   claude_settings.parent.mkdir(parents=True, exist_ok=True)
-  with open(claude_settings, "w") as f:
-    json.dump(settings, f, indent=2)
+  fd, tmp_path = tempfile.mkstemp(
+    dir=str(claude_settings.parent),
+    suffix=".json",
+    prefix=".settings_tmp_",
+  )
+  try:
+    with os.fdopen(fd, "w") as f:
+      json.dump(settings, f, indent=2)
+    os.replace(tmp_path, str(claude_settings))
+  except Exception:
+    # Clean up temp file on failure
+    try:
+      os.unlink(tmp_path)
+    except OSError:
+      pass
+    raise
 
-  console.print(f"\n  [green]\u2713[/green] Added AgentVault MCP server to {claude_settings}")
+  console.print(f"  [green]\u2713[/green] Added AgentVault MCP server to {claude_settings}")
   console.print("  Restart Claude Code to activate.\n")
 
 

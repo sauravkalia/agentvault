@@ -11,7 +11,19 @@
 
 set -euo pipefail
 
-AGENTVAULT_CMD="${AGENTVAULT_CMD:-agentvault}"
+# Resolve agentvault from PATH — do not allow environment override
+AGENTVAULT_CMD="$(command -v agentvault 2>/dev/null || true)"
+
+if [[ -z "$AGENTVAULT_CMD" ]]; then
+  echo "agentvault not found in PATH, skipping auto-save" >&2
+  exit 0
+fi
+
+# Verify it's actually the agentvault binary
+if [[ "$(basename "$AGENTVAULT_CMD")" != "agentvault" ]]; then
+  echo "Invalid agentvault path: $AGENTVAULT_CMD" >&2
+  exit 1
+fi
 
 # Run ingest in background — only new chunks are added (existing are deduped)
 "$AGENTVAULT_CMD" ingest --source claude-code &>/dev/null &

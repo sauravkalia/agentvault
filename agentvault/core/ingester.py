@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Optional
 
+from agentvault.core.redactor import redact_secrets
 from agentvault.core.schema import AgentSession, Chunk, Exchange
 
 
@@ -18,7 +19,7 @@ def _build_exchange_text(exchange: Exchange) -> str:
   role_label = {"human": "User", "assistant": "Assistant", "system": "System"}.get(
     exchange.role, exchange.role.capitalize()
   )
-  text = f"**{role_label}**: {exchange.content}"
+  text = f"**{role_label}**: {redact_secrets(exchange.content)}"
 
   if exchange.tool_calls:
     tools_used = [tc.name for tc in exchange.tool_calls]
