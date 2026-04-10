@@ -1,4 +1,4 @@
-"""ChromaDB storage layer for AgentVault."""
+"""ChromaDB storage layer for AgentVault Memory."""
 
 from __future__ import annotations
 

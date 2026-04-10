@@ -1,4 +1,4 @@
-"""AgentVault — Unified memory layer for AI coding agents."""
+"""AgentVault Memory — Unified memory layer for AI coding agents."""
 
 import os
 

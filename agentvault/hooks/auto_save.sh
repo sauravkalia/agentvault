@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AgentVault auto-save hook for Claude Code.
+# AgentVault Memory auto-save hook for Claude Code.
 #
 # Runs incremental sync after a Claude Code session stops.
 # Install: agentvault mcp-install (adds to Claude Code hooks)

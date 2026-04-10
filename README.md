@@ -1,8 +1,20 @@
-# AgentVault
+<div align="center">
 
-Unified memory layer that consolidates history from all your AI coding agents — searchable by humans (Obsidian) and by AI (MCP).
+<img src="assets/logo.png" alt="AgentVault Memory" width="280">
 
-Every conversation you have across Claude Code, OpenCode, Codex, Cursor — all siloed. Start a new session and your agent has zero context from any of them. AgentVault fixes that.
+### Unified memory layer for AI coding agents
+
+Searchable by humans (Obsidian) and by AI (MCP)
+
+[![PyPI](https://img.shields.io/pypi/v/agentvault-memory?style=flat-square&color=6366f1)](https://pypi.org/project/agentvault-memory/)
+[![Python](https://img.shields.io/pypi/pyversions/agentvault-memory?style=flat-square)](https://pypi.org/project/agentvault-memory/)
+[![License](https://img.shields.io/github/license/sauravkalia/agentvault?style=flat-square)](LICENSE)
+
+</div>
+
+---
+
+Every conversation you have across Claude Code, OpenCode, Codex, Cursor — all siloed. Start a new session and your agent has zero context from any of them. AgentVault Memory fixes that.
 
 ## The Problem
 
@@ -12,11 +24,11 @@ Developers now use 3-4 AI coding tools daily — Claude Code in one terminal, Cu
 
 You open a new Claude Code session and ask *"how did we handle auth?"* — it has no idea. The answer is in a Cursor session from last month. Or a Codex session from last week. Or three different Claude Code sessions across two projects.
 
-## Why AgentVault
+## Why AgentVault Memory
 
 There are many AI memory tools — MemPalace, Mem0, Zep, Letta, Pieces. None of them solve this specific problem.
 
-| | AgentVault | MemPalace | Mem0 | Zep | Pieces | Claude Auto Dream |
+| | AgentVault Memory | MemPalace | Mem0 | Zep | Pieces | Claude Auto Dream |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
 | **Reads history from Claude Code** | Yes | No | No | No | No | Yes |
 | **Reads history from Cursor** | Yes | No | No | No | No | No |
@@ -29,20 +41,20 @@ There are many AI memory tools — MemPalace, Mem0, Zep, Letta, Pieces. None of 
 | **Fully local** | Yes | Yes | No | No | No | Yes |
 | **Free** | Yes | Yes | Free tier | $25/mo+ | $10/mo | Yes |
 
-**The core difference:** Other tools store what the AI *decides* to remember. AgentVault reads the raw conversation history files that your tools already store on disk — every word, every decision, every debugging session — and makes it all searchable. Nothing is lost because nothing is summarized away.
+**The core difference:** Other tools store what the AI *decides* to remember. AgentVault Memory reads the raw conversation history files that your tools already store on disk — every word, every decision, every debugging session — and makes it all searchable. Nothing is lost because nothing is summarized away.
 
 ## Token Efficiency
 
 The obvious question: if you have 19.5M tokens of history, how do you use it without blowing up the context window?
 
-**You don't load it.** AgentVault uses vector search — it only retrieves what's relevant to your question.
+**You don't load it.** AgentVault Memory uses vector search — it only retrieves what's relevant to your question.
 
 | Approach | Tokens loaded | Annual cost | What you lose |
 |----------|:---:|:---:|---|
 | Paste everything into context | 19.5M (impossible) | Doesn't fit | — |
 | LLM summarization (Mem0, etc.) | ~650K | ~$507 | Nuance, exact quotes, reasoning |
-| **AgentVault on startup** | **~250** | **$0** | Nothing — full history in ChromaDB |
-| **AgentVault per search** | **~500-2,000** | **$0** | Nothing — returns exact matches |
+| **AgentVault Memory on startup** | **~250** | **$0** | Nothing — full history in ChromaDB |
+| **AgentVault Memory per search** | **~500-2,000** | **$0** | Nothing — returns exact matches |
 
 **How it works under the hood:**
 
@@ -70,7 +82,7 @@ The search is local (ChromaDB + HNSW index on your machine), the embedding model
 ```
 Terminal 1: Claude Code (project A)  ─┐
 Terminal 2: Claude Code (project B)  ─┤
-Terminal 3: OpenCode                 ─┼──→ AgentVault ──→ ChromaDB (AI search)
+Terminal 3: OpenCode                 ─┼──→ AgentVault Memory ──→ ChromaDB (AI search)
 Terminal 4: Codex                    ─┤                └──→ Obsidian (you browse)
 IDE: Cursor                          ─┘
 
@@ -117,7 +129,7 @@ No manual `--obsidian` flag or `mcp-install` needed. Everything is auto-detected
 
 ## What Gets Indexed
 
-From each session, AgentVault extracts:
+From each session, AgentVault Memory extracts:
 
 | Field | Source |
 |-------|--------|
@@ -148,7 +160,7 @@ Your AI calls these automatically when you ask questions like:
 
 ## Obsidian Integration
 
-If an Obsidian vault is detected (or provided via `--obsidian`), AgentVault writes browsable markdown:
+If an Obsidian vault is detected (or provided via `--obsidian`), AgentVault Memory writes browsable markdown:
 
 ```
 obsidian-vault/
@@ -247,7 +259,7 @@ agentvault/
 
 ## Inspiration
 
-Inspired by [MemPalace](https://github.com/milla-jovovich/mempalace) — which proved that raw ChromaDB retrieval achieves 96.6% recall on LongMemEval with zero API calls. AgentVault applies this to the specific problem of multi-agent session consolidation for developers.
+Inspired by [MemPalace](https://github.com/milla-jovovich/mempalace) — which proved that raw ChromaDB retrieval achieves 96.6% recall on LongMemEval with zero API calls. AgentVault Memory applies this to the specific problem of multi-agent session consolidation for developers.
 
 ## License
 

@@ -1,4 +1,4 @@
-"""Configuration management for AgentVault."""
+"""Configuration management for AgentVault Memory."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""CLI entry point for AgentVault."""
+"""CLI entry point for AgentVault Memory."""
 
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ def _install_auto_save_hook():
 @click.group()
 @click.version_option(package_name="agentvault-memory")
 def cli():
-  """AgentVault — Unified memory for AI coding agents."""
+  """AgentVault Memory — Unified memory for AI coding agents."""
   pass
 
 
@@ -164,7 +164,7 @@ def init(obsidian: str | None):
   from agentvault.adapters.cursor import CursorAdapter
   from agentvault.adapters.opencode import OpenCodeAdapter
 
-  console.print("\n[bold]AgentVault Init[/bold]\n")
+  console.print("\n[bold]AgentVault Memory Init[/bold]\n")
 
   # Create vault directory with restrictive permissions
   DEFAULT_VAULT_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -274,7 +274,7 @@ def ingest(source: str | None, max_tokens: int):
   if source:
     adapters = [a for a in adapters if a.name == source]
 
-  console.print("\n[bold]AgentVault Ingest[/bold]\n")
+  console.print("\n[bold]AgentVault Memory Ingest[/bold]\n")
 
   all_sessions = []
 
@@ -387,7 +387,7 @@ def status():
   except Exception:
     stats = {"total_chunks": 0, "projects": [], "sources": []}
 
-  table = Table(title="AgentVault Status")
+  table = Table(title="AgentVault Memory Status")
   table.add_column("Metric", style="bold")
   table.add_column("Value")
 

@@ -1,4 +1,4 @@
-"""MCP server for AgentVault — exposes search tools to AI agents.
+"""MCP server for AgentVault Memory — exposes search tools to AI agents.
 
 Run with:
   python -m agentvault.mcp_server
@@ -210,7 +210,7 @@ class MCPServer:
       elif tool_name == "vault_status":
         stats = self.store.get_stats()
         text = (
-          f"AgentVault Status:\n"
+          f"AgentVault Memory Status:\n"
           f"  Total chunks: {stats['total_chunks']}\n"
           f"  Projects: {', '.join(stats['projects']) or 'none'}\n"
           f"  Sources: {', '.join(stats['sources']) or 'none'}"
