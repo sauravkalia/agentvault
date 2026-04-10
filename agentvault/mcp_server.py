@@ -69,7 +69,7 @@ def _get_tools() -> list[dict]:
           },
           "project": {
             "type": "string",
-            "description": "Filter by project name (e.g. 'sphere-web', 'evaluate-explorer')",
+            "description": "Filter by project name (e.g. 'my-app', 'backend-api')",
           },
           "source": {
             "type": "string",
