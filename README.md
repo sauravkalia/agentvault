@@ -59,12 +59,12 @@ The obvious question: if you have 19.5M tokens of history, how do you use it wit
 **How it works under the hood:**
 
 ```
-You: "How did we handle rate limiting in sphere-web?"
+You: "How did we handle rate limiting in my-saas-app?"
       │
       ▼ Claude calls vault_search via MCP
       │
       ▼ ChromaDB: embed query → HNSW index → find 5 nearest chunks
-      │           filter by project="sphere-web"
+      │           filter by project="my-saas-app"
       │           ~30ms, zero API calls
       │
       ▼ Returns ~1,500 tokens of relevant conversation
@@ -109,7 +109,7 @@ agentvault ingest
 
 # Search anything
 agentvault search "why did we switch to GraphQL"
-agentvault search "auth bug" --project sphere-web
+agentvault search "auth bug" --project my-saas-app
 agentvault search "rate limiting" --source claude-code
 
 # Check status
@@ -166,9 +166,9 @@ If an Obsidian vault is detected (or provided via `--obsidian`), AgentVault Memo
 obsidian-vault/
   agent-history/
     2026-04-09.md                      ← daily digest
-    sphere-web/
+    my-saas-app/
       2026-04-09-4f66f16f.md           ← session transcript
-    evaluate-explorer/
+    my-api-server/
       2026-04-08-aa20d038.md
 ```
 
