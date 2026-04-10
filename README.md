@@ -4,6 +4,67 @@ Unified memory layer that consolidates history from all your AI coding agents �
 
 Every conversation you have across Claude Code, OpenCode, Codex, Cursor — all siloed. Start a new session and your agent has zero context from any of them. AgentVault fixes that.
 
+## The Problem
+
+Developers now use 3-4 AI coding tools daily — Claude Code in one terminal, Cursor in the IDE, Codex for quick tasks, OpenCode for another project. Every decision, every debugging session, every architecture discussion happens in these conversations. Then the session ends and it's gone.
+
+**6 months of daily AI use = ~19.5 million tokens of conversations.** That's every decision, every "we tried X and it failed because Y", every debugging session. All trapped in separate tools that don't talk to each other.
+
+You open a new Claude Code session and ask *"how did we handle auth?"* — it has no idea. The answer is in a Cursor session from last month. Or a Codex session from last week. Or three different Claude Code sessions across two projects.
+
+## Why AgentVault
+
+There are many AI memory tools — MemPalace, Mem0, Zep, Letta, Pieces. None of them solve this specific problem.
+
+| | AgentVault | MemPalace | Mem0 | Zep | Pieces | Claude Auto Dream |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **Reads history from Claude Code** | Yes | No | No | No | No | Yes |
+| **Reads history from Cursor** | Yes | No | No | No | No | No |
+| **Reads history from Codex** | Yes | No | No | No | No | No |
+| **Reads history from OpenCode** | Yes | No | No | No | No | No |
+| **Cross-tool semantic search** | Yes | — | — | — | — | No |
+| **Obsidian output** | Yes | No | No | No | No | No |
+| **MCP server for AI querying** | Yes | Yes | No | No | No | — |
+| **Zero API keys** | Yes | Yes | No | No | No | Yes |
+| **Fully local** | Yes | Yes | No | No | No | Yes |
+| **Free** | Yes | Yes | Free tier | $25/mo+ | $10/mo | Yes |
+
+**The core difference:** Other tools store what the AI *decides* to remember. AgentVault reads the raw conversation history files that your tools already store on disk — every word, every decision, every debugging session — and makes it all searchable. Nothing is lost because nothing is summarized away.
+
+## Token Efficiency
+
+The obvious question: if you have 19.5M tokens of history, how do you use it without blowing up the context window?
+
+**You don't load it.** AgentVault uses vector search — it only retrieves what's relevant to your question.
+
+| Approach | Tokens loaded | Annual cost | What you lose |
+|----------|:---:|:---:|---|
+| Paste everything into context | 19.5M (impossible) | Doesn't fit | — |
+| LLM summarization (Mem0, etc.) | ~650K | ~$507 | Nuance, exact quotes, reasoning |
+| **AgentVault on startup** | **~250** | **$0** | Nothing — full history in ChromaDB |
+| **AgentVault per search** | **~500-2,000** | **$0** | Nothing — returns exact matches |
+
+**How it works under the hood:**
+
+```
+You: "How did we handle rate limiting in sphere-web?"
+      │
+      ▼ Claude calls vault_search via MCP
+      │
+      ▼ ChromaDB: embed query → HNSW index → find 5 nearest chunks
+      │           filter by project="sphere-web"
+      │           ~30ms, zero API calls
+      │
+      ▼ Returns ~1,500 tokens of relevant conversation
+      │
+Claude: "In your March 15 session, you implemented rate limiting
+         using upstash/ratelimit with Redis..."
+```
+
+**10 searches in a session = ~15,000 tokens. That's 92% of a 200K context window still free for actual work.**
+
+The search is local (ChromaDB + HNSW index on your machine), the embedding model runs locally (~80MB, downloaded once), and no data ever leaves your machine.
+
 ## How It Works
 
 ```
@@ -176,17 +237,6 @@ agentvault/
 - Obsidian files written with `0600` permissions
 - Atomic config file writes with backups
 - No telemetry, no cloud, no data leaves your machine
-
-## Context Efficiency
-
-AgentVault does NOT load all history into context. It uses a layered approach:
-
-| Layer | When | Tokens |
-|-------|------|--------|
-| L0+L1 (identity + active context) | Session start | ~250 |
-| L2 (on-demand search) | When asked | ~500-2000 per query |
-
-10 searches in a session = ~15K tokens. That's 91% of a 200K context window left free for actual work.
 
 ## Requirements
 
