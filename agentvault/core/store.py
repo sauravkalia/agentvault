@@ -120,3 +120,27 @@ class VaultStore:
     if results["ids"]:
       self.collection.delete(ids=results["ids"])
     return len(results["ids"])
+
+  def delete_by_project(self, project: str) -> int:
+    """Delete all chunks for a project. Returns count deleted."""
+    results = self.collection.get(where={"project": project})
+    if results["ids"]:
+      self.collection.delete(ids=results["ids"])
+    return len(results["ids"])
+
+  def delete_by_source(self, source: str) -> int:
+    """Delete all chunks for a source tool. Returns count deleted."""
+    results = self.collection.get(where={"source": source})
+    if results["ids"]:
+      self.collection.delete(ids=results["ids"])
+    return len(results["ids"])
+
+  def delete_all(self) -> int:
+    """Delete all chunks. Returns count deleted."""
+    count = self.collection.count()
+    if count > 0:
+      # Get all IDs and delete
+      results = self.collection.get(limit=count)
+      if results["ids"]:
+        self.collection.delete(ids=results["ids"])
+    return count

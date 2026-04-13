@@ -427,5 +427,114 @@ def mcp_install():
   console.print("\n  Restart your AI tools to activate.\n")
 
 
+@cli.command()
+@click.option("--session", "session_id", type=str, default=None, help="Delete by session ID")
+@click.option("--project", "-p", type=str, default=None, help="Delete by project")
+@click.option("--source", "-s", type=str, default=None, help="Delete by source tool")
+@click.option("--all", "delete_all", is_flag=True, default=False, help="Delete everything")
+def forget(session_id: str | None, project: str | None, source: str | None, delete_all: bool):
+  """Delete sessions from the vault."""
+  from agentvault.core.store import VaultStore
+
+  if not any([session_id, project, source, delete_all]):
+    console.print("\n  [yellow]![/yellow] Specify what to forget: "
+                  "--session, --project, --source, or --all\n")
+    return
+
+  store = VaultStore()
+
+  if delete_all:
+    if not click.confirm("  This will delete ALL data from the vault. Are you sure?"):
+      console.print("  Cancelled.\n")
+      return
+    count = store.delete_all()
+    console.print(f"\n  [green]\u2713[/green] Deleted {count} chunks (all data).\n")
+
+  elif session_id:
+    count = store.delete_by_session(session_id)
+    short = session_id[:8]
+    console.print(f"\n  [green]\u2713[/green] Deleted {count} chunks for session {short}.\n")
+
+  elif project:
+    if not click.confirm(f"  Delete all data for project '{project}'?"):
+      console.print("  Cancelled.\n")
+      return
+    count = store.delete_by_project(project)
+    console.print(f"\n  [green]\u2713[/green] Deleted {count} chunks for project '{project}'.\n")
+
+  elif source:
+    if not click.confirm(f"  Delete all data from '{source}'?"):
+      console.print("  Cancelled.\n")
+      return
+    count = store.delete_by_source(source)
+    console.print(f"\n  [green]\u2713[/green] Deleted {count} chunks from '{source}'.\n")
+
+
+@cli.command()
+@click.option("--project", "-p", type=str, default=None, help="Filter by project")
+@click.option("--export", "export_path", type=click.Path(), default=None, help="Export to markdown")
+def decisions(project: str | None, export_path: str | None):
+  """Extract and display decisions from your conversation history."""
+  from agentvault.core.decisions import Decision, extract_decisions, format_decisions_markdown
+  from agentvault.core.store import VaultStore
+
+  store = VaultStore()
+
+  # Search for chunks that likely contain decisions
+  decision_keywords = [
+    "decided", "chose", "going with", "will use",
+    "agreed", "switching to", "plan is", "recommend",
+  ]
+  query = " ".join(decision_keywords)
+  results = store.search(query=query, top_k=50, project=project)
+
+  if not results:
+    console.print("\n  No conversations found to analyze.\n")
+    return
+
+  # Extract decisions from search results
+  all_decisions: list[Decision] = []
+  seen: set[str] = set()
+
+  for hit in results:
+    meta = hit["metadata"]
+    content = hit["content"]
+
+    # Create a minimal session-like object for the extractor
+    from agentvault.core.schema import AgentSession, Exchange
+    mini_session = AgentSession(
+      id=meta.get("session_id", ""),
+      source=meta.get("source", ""),
+      project=meta.get("project", ""),
+      started_at=meta.get("timestamp", ""),
+      ended_at="",
+      working_directory="",
+      exchanges=[Exchange(role="assistant", content=content, timestamp=meta.get("timestamp", ""))],
+    )
+    extracted = extract_decisions(mini_session)
+    for d in extracted:
+      key = d.text.lower()[:80]
+      if key not in seen:
+        seen.add(key)
+        all_decisions.append(d)
+
+  if not all_decisions:
+    console.print("\n  No decisions found in your conversations.\n")
+    return
+
+  console.print(f"\n[bold]Found {len(all_decisions)} decisions:[/bold]\n")
+  for d in all_decisions:
+    date = d.timestamp[:10] if d.timestamp else "?"
+    console.print(
+      f"  [cyan]{d.project}[/cyan] ({d.source}, {date})"
+    )
+    console.print(f"    {d.text}\n")
+
+  if export_path:
+    md = format_decisions_markdown(all_decisions)
+    Path(export_path).write_text(md, encoding="utf-8")
+    console.print(f"  [green]\u2713[/green] Exported to {export_path}\n")
+
+
 if __name__ == "__main__":
   cli()

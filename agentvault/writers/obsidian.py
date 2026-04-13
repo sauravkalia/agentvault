@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from agentvault.core.decisions import extract_decisions
 from agentvault.core.redactor import redact_secrets
 from agentvault.core.schema import AgentSession
 
@@ -111,12 +112,19 @@ def write_session(
       files_list += f"\n- *...and {len(session.files_touched) - 20} more*"
     files_section = f"\n## Files Touched\n{files_list}\n"
 
+  decisions_section = ""
+  decisions = extract_decisions(session)
+  if decisions:
+    dec_lines = "\n".join(f"- {d.text}" for d in decisions[:10])
+    decisions_section = f"\n## Key Decisions\n{dec_lines}\n"
+
   transcript = _format_exchange_markdown(session)
 
   content = "\n\n".join(filter(None, [
     frontmatter,
     header,
     summary_section,
+    decisions_section,
     files_section,
     "## Transcript",
     transcript,

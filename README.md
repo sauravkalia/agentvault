@@ -112,6 +112,14 @@ agentvault search "why did we switch to GraphQL"
 agentvault search "auth bug" --project my-saas-app
 agentvault search "rate limiting" --source claude-code
 
+# View decisions extracted from your conversations
+agentvault decisions
+agentvault decisions --project my-saas-app
+
+# Delete data you don't want
+agentvault forget --project old-project
+agentvault forget --source cursor
+
 # Check status
 agentvault status
 ```
@@ -151,6 +159,7 @@ After `init`, your AI tools have these search tools available via MCP:
 | `vault_search` | Semantic search with project/source/branch filters |
 | `vault_project_context` | "What have I done on project X recently?" |
 | `vault_cross_reference` | "Did I solve this problem before in another project?" |
+| `vault_decisions` | "What decisions did I make about auth?" |
 | `vault_status` | Overview of indexed sessions and projects |
 
 Your AI calls these automatically when you ask questions like:
@@ -189,6 +198,29 @@ Each session file has YAML frontmatter (source, project, date, branch, tags) —
 After `init`, a Claude Code Stop hook is installed that runs `agentvault ingest --source claude-code` after every session ends. New conversations are automatically indexed — no manual `ingest` needed.
 
 For other tools, run `agentvault ingest` periodically or after significant work.
+
+## Session Summaries
+
+Every session is auto-summarized during ingestion using keyword extraction (no LLM needed). Summaries appear in Obsidian files and daily digests, making it easy to scan what each session was about without reading the full transcript.
+
+## Decision Log
+
+AgentVault Memory automatically extracts decisions from your conversations — "decided to use X", "chose Y over Z", "switching to W". These are surfaced via:
+
+- **CLI:** `agentvault decisions` — view all extracted decisions, filter by project
+- **MCP:** `vault_decisions` tool — your AI can query past decisions mid-session
+- **Obsidian:** `## Key Decisions` section added to each session file
+
+## Forget (Data Control)
+
+Delete any data you don't want in the vault:
+
+```bash
+agentvault forget --session <id>     # one session
+agentvault forget --project old-app  # all sessions for a project
+agentvault forget --source cursor    # all sessions from a tool
+agentvault forget --all              # wipe everything (with confirmation)
+```
 
 ## Adding a New Adapter
 

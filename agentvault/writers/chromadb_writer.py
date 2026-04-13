@@ -5,6 +5,7 @@ from __future__ import annotations
 from agentvault.core.ingester import chunk_session
 from agentvault.core.schema import AgentSession
 from agentvault.core.store import VaultStore
+from agentvault.core.summarizer import generate_summary
 
 
 def ingest_session(
@@ -13,6 +14,10 @@ def ingest_session(
   max_tokens: int = 800,
 ) -> int:
   """Chunk a session and store it in ChromaDB. Returns chunks added."""
+  # Generate summary if not already set
+  if not session.summary:
+    session.summary = generate_summary(session)
+
   chunks = chunk_session(session, max_tokens=max_tokens)
   return store.add_chunks(chunks)
 

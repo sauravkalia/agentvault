@@ -126,6 +126,19 @@ def _get_tools() -> list[dict]:
         "properties": {},
       },
     },
+    {
+      "name": "vault_decisions",
+      "description": "Find decisions made in past conversations. Returns extracted decisions like 'chose X over Y because...' from your AI session history.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Filter decisions by project name",
+          },
+        },
+      },
+    },
   ]
 
 
@@ -215,6 +228,49 @@ class MCPServer:
           f"  Projects: {', '.join(stats['projects']) or 'none'}\n"
           f"  Sources: {', '.join(stats['sources']) or 'none'}"
         )
+
+      elif tool_name == "vault_decisions":
+        from agentvault.core.decisions import Decision, extract_decisions
+        from agentvault.core.schema import AgentSession, Exchange
+
+        project = args.get("project")
+        if project:
+          _validate_string(project, "project", max_length=200)
+
+        query = "decided chose going with will use agreed switching plan recommend"
+        results = self.store.search(query=query, top_k=30, project=project)
+
+        all_decisions: list[Decision] = []
+        seen: set[str] = set()
+        for hit in results:
+          meta = hit["metadata"]
+          mini = AgentSession(
+            id=meta.get("session_id", ""),
+            source=meta.get("source", ""),
+            project=meta.get("project", ""),
+            started_at=meta.get("timestamp", ""),
+            ended_at="",
+            working_directory="",
+            exchanges=[Exchange(
+              role="assistant",
+              content=hit["content"],
+              timestamp=meta.get("timestamp", ""),
+            )],
+          )
+          for d in extract_decisions(mini):
+            key = d.text.lower()[:80]
+            if key not in seen:
+              seen.add(key)
+              all_decisions.append(d)
+
+        if not all_decisions:
+          text = "No decisions found in the vault."
+        else:
+          lines = [f"Found {len(all_decisions)} decisions:\n"]
+          for d in all_decisions:
+            date = d.timestamp[:10] if d.timestamp else "?"
+            lines.append(f"- [{d.project}, {d.source}, {date}] {d.text}")
+          text = "\n".join(lines)
 
       else:
         return _make_error(req_id, -32602, f"Unknown tool: {tool_name}")
