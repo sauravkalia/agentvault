@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="AgentVault Memory" width="280">
+<img src="https://raw.githubusercontent.com/sauravkalia/agentvault/main/assets/logo.png" alt="AgentVault Memory" width="280">
 
 ### Unified memory layer for AI coding agents
 
