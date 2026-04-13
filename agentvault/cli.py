@@ -328,6 +328,86 @@ def ingest(source: str | None, max_tokens: int):
 
     console.print(f"    [green]\u2713[/green] {written} session files written")
 
+  # Save last ingest timestamp per source
+  import time
+  timestamps = config.get("last_ingest_timestamp", {})
+  for adapter in adapters:
+    if adapter.detect():
+      timestamps[adapter.name] = time.time()
+  config["last_ingest_timestamp"] = timestamps
+  save_config(config)
+
+  console.print("\n  [bold green]Done.[/bold green]\n")
+
+
+@cli.command()
+@click.option("--source", type=str, default=None, help="Only sync specific source")
+def sync(source: str | None):
+  """Incremental sync — only ingest new sessions since last run."""
+  from agentvault.adapters.claude_code import ClaudeCodeAdapter
+  from agentvault.adapters.codex import CodexAdapter
+  from agentvault.adapters.cursor import CursorAdapter
+  from agentvault.adapters.opencode import OpenCodeAdapter
+  from agentvault.core.store import VaultStore
+  from agentvault.writers.chromadb_writer import ingest_sessions
+  from agentvault.writers.obsidian import write_session
+
+  config = load_config()
+  store = VaultStore()
+  timestamps = config.get("last_ingest_timestamp", {})
+
+  adapters = [
+    ClaudeCodeAdapter(),
+    OpenCodeAdapter(),
+    CodexAdapter(),
+    CursorAdapter(),
+  ]
+  if source:
+    adapters = [a for a in adapters if a.name == source]
+
+  console.print("\n[bold]AgentVault Memory Sync[/bold]\n")
+
+  import time
+  all_sessions = []
+
+  for adapter in adapters:
+    if not adapter.detect():
+      continue
+
+    last = timestamps.get(adapter.name)
+    sessions = adapter.get_all_sessions(since_mtime=last)
+    if sessions:
+      console.print(f"  [bold]{adapter.name}[/bold]: {len(sessions)} new sessions")
+      all_sessions.extend(sessions)
+    else:
+      console.print(f"  [dim]{adapter.name}: up to date[/dim]")
+
+  if not all_sessions:
+    console.print("\n  Everything is up to date.\n")
+    return
+
+  console.print("\n  Writing to ChromaDB...")
+  result = ingest_sessions(all_sessions, store)
+  console.print(
+    f"    [green]\u2713[/green] {result['chunks_added']} chunks indexed"
+  )
+
+  obsidian_vault = config.get("obsidian_vault")
+  if obsidian_vault:
+    vault_path = Path(obsidian_vault)
+    for session in all_sessions:
+      try:
+        write_session(session, vault_path)
+      except Exception:
+        pass
+
+  # Update timestamps
+  for adapter in adapters:
+    if adapter.detect():
+      timestamps[adapter.name] = time.time()
+  config["last_ingest_timestamp"] = timestamps
+  save_config(config)
+
   console.print("\n  [bold green]Done.[/bold green]\n")
 
 
@@ -359,18 +439,27 @@ def search(query: str, project: str | None, source: str | None, top_k: int):
     distance = hit.get("distance")
     relevance = f"{1 - distance:.0%}" if distance is not None else "?"
 
-    console.print(f"[bold]Result {i}[/bold] ({relevance} relevant)")
-    console.print(f"  Project: [cyan]{meta.get('project', '?')}[/cyan] | "
-                  f"Source: {meta.get('source', '?')} | "
-                  f"Branch: {meta.get('git_branch', '?')} | "
-                  f"Date: {meta.get('timestamp', '?')[:10]}")
-    console.print()
+    project = meta.get("project", "?")
+    source_name = meta.get("source", "?")
+    branch = meta.get("git_branch", "")
+    date = meta.get("timestamp", "?")[:10]
+
+    # Header line with relevance badge
+    header = f"[bold]#{i}[/bold] [green]{relevance}[/green]"
+    header += f" [cyan]{project}[/cyan]"
+    header += f" [dim]({source_name})[/dim]"
+    if branch:
+      header += f" [dim]branch:{branch}[/dim]"
+    header += f" [dim]{date}[/dim]"
+    console.print(header)
 
     # Truncate long content for terminal display
     content = hit["content"]
-    if len(content) > 500:
-      content = content[:500] + "..."
-    console.print(f"  {content}")
+    if len(content) > 400:
+      content = content[:400] + "..."
+    # Indent content for readability
+    for line in content.split("\n")[:8]:
+      console.print(f"  {line}")
     console.print()
 
 
@@ -392,14 +481,94 @@ def status():
   table.add_column("Value")
 
   table.add_row("Vault directory", str(DEFAULT_VAULT_DIR))
-  table.add_row("Total chunks", str(stats["total_chunks"]))
-  table.add_row("Projects", ", ".join(stats["projects"]) or "none")
-  table.add_row("Sources", ", ".join(stats["sources"]) or "none")
-  table.add_row("Obsidian vault", config.get("obsidian_vault") or "not configured")
+  table.add_row("Total chunks", str(stats.get("total_chunks", 0)))
+  table.add_row("Total sessions", str(stats.get("total_sessions", 0)))
+  table.add_row(
+    "Obsidian vault",
+    config.get("obsidian_vault") or "not configured",
+  )
 
   console.print()
   console.print(table)
+
+  # Per-source breakdown
+  sources_detail = stats.get("sources_detail", {})
+  if sources_detail:
+    src_table = Table(title="By Source")
+    src_table.add_column("Tool", style="bold")
+    src_table.add_column("Chunks", justify="right")
+    for src, count in sources_detail.items():
+      src_table.add_row(src, str(count))
+    console.print(src_table)
+
+  # Per-project breakdown
+  projects_detail = stats.get("projects_detail", {})
+  if projects_detail:
+    proj_table = Table(title="By Project")
+    proj_table.add_column("Project", style="bold")
+    proj_table.add_column("Chunks", justify="right")
+    for proj, count in projects_detail.items():
+      proj_table.add_row(proj, str(count))
+    console.print(proj_table)
+
   console.print()
+
+
+@cli.command()
+@click.argument("output", type=click.Path())
+@click.option("--format", "fmt", type=click.Choice(["json", "markdown"]), default="json")
+@click.option("--project", "-p", type=str, default=None, help="Filter by project")
+def export(output: str, fmt: str, project: str | None):
+  """Export vault data to JSON or Markdown."""
+  from agentvault.core.store import VaultStore
+
+  store = VaultStore()
+  stats = store.get_stats()
+  total = stats.get("total_chunks", 0)
+
+  if total == 0:
+    console.print("\n  Vault is empty. Nothing to export.\n")
+    return
+
+  # Get all chunks (with optional project filter)
+  where = {"project": project} if project else None
+  results = store.collection.get(
+    limit=total,
+    include=["documents", "metadatas"],
+    where=where,
+  )
+
+  out_path = Path(output)
+
+  if fmt == "json":
+    import json as json_mod
+    data = []
+    for i in range(len(results["ids"])):
+      data.append({
+        "id": results["ids"][i],
+        "content": results["documents"][i],
+        "metadata": results["metadatas"][i],
+      })
+    out_path.write_text(
+      json_mod.dumps(data, indent=2), encoding="utf-8"
+    )
+
+  elif fmt == "markdown":
+    lines = ["# AgentVault Memory Export\n"]
+    lines.append(f"Total chunks: {len(results['ids'])}\n")
+    for i in range(len(results["ids"])):
+      meta = results["metadatas"][i]
+      date = meta.get("timestamp", "?")[:10]
+      lines.append(f"## {meta.get('project', '?')} — {date}")
+      lines.append(f"*Source: {meta.get('source', '?')}*\n")
+      lines.append(results["documents"][i])
+      lines.append("\n---\n")
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+
+  console.print(
+    f"\n  [green]\u2713[/green] Exported {len(results['ids'])} chunks "
+    f"to {out_path}\n"
+  )
 
 
 @cli.command(name="mcp-install")

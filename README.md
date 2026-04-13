@@ -116,11 +116,18 @@ agentvault search "rate limiting" --source claude-code
 agentvault decisions
 agentvault decisions --project my-saas-app
 
+# Incremental sync — only new sessions since last run
+agentvault sync
+
 # Delete data you don't want
 agentvault forget --project old-project
 agentvault forget --source cursor
 
-# Check status
+# Export your data
+agentvault export backup.json
+agentvault export report.md --format markdown --project my-saas-app
+
+# Check status (with per-tool and per-project breakdown)
 agentvault status
 ```
 

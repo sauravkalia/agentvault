@@ -99,19 +99,31 @@ class VaultStore:
     """Return store statistics."""
     count = self.collection.count()
 
-    projects = set()
-    sources = set()
+    projects: dict[str, int] = {}
+    sources: dict[str, int] = {}
+    sessions: set[str] = set()
     if count > 0:
-      # Sample metadata to get unique values
-      sample = self.collection.get(limit=min(count, 1000), include=["metadatas"])
+      sample = self.collection.get(
+        limit=min(count, 10000), include=["metadatas"]
+      )
       for meta in sample["metadatas"]:
-        projects.add(meta.get("project", "unknown"))
-        sources.add(meta.get("source", "unknown"))
+        proj = meta.get("project", "unknown")
+        src = meta.get("source", "unknown")
+        projects[proj] = projects.get(proj, 0) + 1
+        sources[src] = sources.get(src, 0) + 1
+        sessions.add(meta.get("session_id", ""))
 
     return {
       "total_chunks": count,
-      "projects": sorted(projects),
-      "sources": sorted(sources),
+      "total_sessions": len(sessions),
+      "projects": sorted(projects.keys()),
+      "projects_detail": dict(
+        sorted(projects.items(), key=lambda x: -x[1])
+      ),
+      "sources": sorted(sources.keys()),
+      "sources_detail": dict(
+        sorted(sources.items(), key=lambda x: -x[1])
+      ),
     }
 
   def delete_by_session(self, session_id: str) -> int:

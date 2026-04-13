@@ -22,6 +22,7 @@ ALLOWED_CONFIG_KEYS = {
   "adapters": dict,
   "auto_sync": bool,
   "chunk_max_tokens": int,
+  "last_ingest_timestamp": dict,
 }
 
 
@@ -40,6 +41,7 @@ def get_default_config() -> dict[str, Any]:
     },
     "auto_sync": False,
     "chunk_max_tokens": 800,
+    "last_ingest_timestamp": {},
   }
 
 

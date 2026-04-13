@@ -44,10 +44,23 @@ class BaseAdapter(ABC):
     """
     ...
 
-  def get_all_sessions(self) -> list[AgentSession]:
-    """Discover and parse all sessions. Convenience method."""
+  def get_all_sessions(self, since_mtime: float | None = None) -> list[AgentSession]:
+    """Discover and parse sessions. Optionally filter by modification time.
+
+    Args:
+      since_mtime: Only process files modified after this Unix timestamp.
+                   If None, processes all sessions.
+    """
     sessions = []
     for path in self.discover_sessions():
+      # Skip files not modified since last ingest
+      if since_mtime is not None and path.exists():
+        try:
+          if path.stat().st_mtime <= since_mtime:
+            continue
+        except OSError:
+          pass
+
       session = self.parse_session(path)
       if session:
         sessions.append(session)

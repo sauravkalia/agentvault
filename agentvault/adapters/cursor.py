@@ -57,6 +57,49 @@ def _extract_message(msg: dict) -> Exchange | None:
   return Exchange(role=role, content=text, timestamp=timestamp)
 
 
+def _build_workspace_project_map(db_path: Path) -> dict[str, str]:
+  """Map composerData keys to project names via workspace storage."""
+  ws_dir = db_path.parent.parent / "workspaceStorage"
+  if not ws_dir.exists():
+    return {}
+
+  project_map: dict[str, str] = {}
+  for ws_path in ws_dir.iterdir():
+    if not ws_path.is_dir():
+      continue
+    ws_json = ws_path / "workspace.json"
+    ws_db = ws_path / "state.vscdb"
+    if not ws_json.exists() or not ws_db.exists():
+      continue
+
+    try:
+      folder_uri = json.loads(ws_json.read_text()).get("folder", "")
+      project_name = Path(folder_uri.replace("file://", "")).name
+      if not project_name:
+        continue
+
+      conn = sqlite3.connect(f"file:{ws_db}?mode=ro", uri=True)
+      rows = conn.execute(
+        "SELECT value FROM ItemTable "
+        "WHERE key = 'composer.composerData'"
+      ).fetchone()
+      conn.close()
+
+      if not rows or not rows[0]:
+        continue
+
+      data = json.loads(rows[0])
+      composers = data.get("allComposers", [])
+      for c in composers:
+        cid = c.get("composerId", "")
+        if cid:
+          project_map[cid] = project_name
+    except (json.JSONDecodeError, sqlite3.Error, OSError):
+      continue
+
+  return project_map
+
+
 class CursorAdapter(BaseAdapter):
   name = "cursor"
   description = "Cursor IDE conversation history"
@@ -66,6 +109,7 @@ class CursorAdapter(BaseAdapter):
     self.history_path = history_path or self.default_history_path()
     self._db_path = self.history_path
     self._conn: sqlite3.Connection | None = None
+    self._project_map: dict[str, str] | None = None
 
   def default_history_path(self) -> Path:
     system = platform.system()
@@ -170,19 +214,26 @@ class CursorAdapter(BaseAdapter):
     if not exchanges:
       return None
 
-    # Try to detect project from context or name
-    project = "cursor"
-    context = data.get("context", {})
-    if isinstance(context, dict):
-      # Some sessions have workspace info in context
-      composers = context.get("composers", [])
-      if composers and isinstance(composers, list):
-        for c in composers:
-          if isinstance(c, dict) and "uri" in c:
-            uri = c["uri"]
-            if "/" in uri:
-              project = Path(uri).name
-              break
+    # Detect project — try workspace map first, then context
+    if self._project_map is None:
+      self._project_map = _build_workspace_project_map(self._db_path)
+
+    project = self._project_map.get(composer_id, "")
+
+    if not project:
+      context = data.get("context", {})
+      if isinstance(context, dict):
+        composers = context.get("composers", [])
+        if composers and isinstance(composers, list):
+          for c in composers:
+            if isinstance(c, dict) and "uri" in c:
+              uri = c["uri"]
+              if "/" in uri:
+                project = Path(uri).name
+                break
+
+    if not project:
+      project = "cursor"
 
     model_name = ""
     model_config = data.get("modelConfig", {})
@@ -205,10 +256,10 @@ class CursorAdapter(BaseAdapter):
       },
     )
 
-  def get_all_sessions(self) -> list[AgentSession]:
+  def get_all_sessions(self, since_mtime: float | None = None) -> list[AgentSession]:
     """Override to ensure DB connection is closed after use."""
     try:
-      return super().get_all_sessions()
+      return super().get_all_sessions(since_mtime=since_mtime)
     finally:
       if self._conn:
         self._conn.close()
