@@ -15,6 +15,7 @@ import traceback
 from typing import Any
 
 from agentvault.config import load_config
+from agentvault.core.optimizer import compact_metadata, dedup_results, optimize_content
 from agentvault.core.store import VaultStore
 
 # MCP protocol constants
@@ -127,6 +128,30 @@ def _get_tools() -> list[dict]:
       },
     },
     {
+      "name": "vault_search_lite",
+      "description": "Token-efficient search — returns short summaries instead of full content. Use this first, then vault_search for details on specific results. Saves ~80% tokens.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What to search for",
+            "maxLength": MAX_QUERY_LENGTH,
+          },
+          "project": {
+            "type": "string",
+            "description": "Filter by project name",
+          },
+          "top_k": {
+            "type": "integer",
+            "description": f"Number of results (default: 10, max: {MAX_TOP_K})",
+            "default": 10,
+          },
+        },
+        "required": ["query"],
+      },
+    },
+    {
       "name": "vault_decisions",
       "description": "Find decisions made in past conversations. Returns extracted decisions like 'chose X over Y because...' from your AI session history.",
       "inputSchema": {
@@ -220,6 +245,49 @@ class MCPServer:
         results = self.store.search(query=query, top_k=10)
         text = self._format_search_results(results)
 
+      elif tool_name == "vault_search_lite":
+        query = _validate_string(args.get("query", ""), "query")
+        top_k = _validate_top_k(args.get("top_k", 10))
+        project = args.get("project")
+        if project:
+          _validate_string(project, "project", max_length=200)
+
+        results = self.store.search(
+          query=query, top_k=top_k, project=project,
+        )
+        results = dedup_results(results)
+
+        if not results:
+          text = "No results found."
+        else:
+          lines = [f"Found {len(results)} results (summaries only):\n"]
+          for i, hit in enumerate(results, 1):
+            meta = hit["metadata"]
+            distance = hit.get("distance")
+            rel = f"{1 - distance:.0%}" if distance is not None else "?"
+            meta_line = compact_metadata(meta)
+
+            # Extract first meaningful line as preview
+            content = optimize_content(hit["content"])
+            first_line = ""
+            for line in content.split("\n"):
+              line = line.strip()
+              if line and not line.startswith("[") and len(line) > 10:
+                first_line = line[:120]
+                if len(line) > 120:
+                  first_line += "..."
+                break
+
+            lines.append(f"[{i}] {rel} — {meta_line}")
+            if first_line:
+              lines.append(f"    {first_line}")
+
+          lines.append(
+            "\nUse vault_search with the same query "
+            "for full content of specific results."
+          )
+          text = "\n".join(lines)
+
       elif tool_name == "vault_status":
         stats = self.store.get_stats()
         text = (
@@ -297,19 +365,27 @@ class MCPServer:
     if not results:
       return "No matching results found in the vault."
 
+    # Deduplicate near-identical results
+    results = dedup_results(results)
+
     parts = [f"Found {len(results)} results:\n"]
     for i, hit in enumerate(results, 1):
       meta = hit["metadata"]
       distance = hit.get("distance")
-      relevance = f" (relevance: {1 - distance:.1%})" if distance is not None else ""
+      relevance = f"{1 - distance:.0%}" if distance is not None else "?"
+
+      # Compact metadata line
+      meta_line = compact_metadata(meta)
+
+      # Optimize content — strip tool noise, truncate code blocks
+      content = optimize_content(hit["content"])
+
+      # Cap content length to save tokens
+      if len(content) > 600:
+        content = content[:600] + "..."
 
       parts.append(
-        f"--- Result {i}{relevance} ---\n"
-        f"Project: {meta.get('project', '?')} | "
-        f"Source: {meta.get('source', '?')} | "
-        f"Branch: {meta.get('git_branch', '?')} | "
-        f"Date: {meta.get('timestamp', '?')[:10]}\n\n"
-        f"{hit['content']}\n"
+        f"[{i}] {relevance} — {meta_line}\n{content}\n"
       )
     return "\n".join(parts)
 
