@@ -47,35 +47,45 @@ There are many AI memory tools — MemPalace, Mem0, Zep, Letta, Pieces. None of 
 
 The obvious question: if you have 19.5M tokens of history, how do you use it without blowing up the context window?
 
-**You don't load it.** AgentVault Memory uses vector search — it only retrieves what's relevant to your question.
+**You don't load it.** AgentVault Memory uses vector search — it only retrieves what's relevant to your question. And it optimizes every response to minimize tokens.
 
-| Approach | Tokens loaded | Annual cost | What you lose |
+| Approach | Tokens per search | Annual cost | What you lose |
 |----------|:---:|:---:|---|
 | Paste everything into context | 19.5M (impossible) | Doesn't fit | — |
 | LLM summarization (Mem0, etc.) | ~650K | ~$507 | Nuance, exact quotes, reasoning |
-| **AgentVault Memory on startup** | **~250** | **$0** | Nothing — full history in ChromaDB |
-| **AgentVault Memory per search** | **~500-2,000** | **$0** | Nothing — returns exact matches |
+| **AgentVault Memory (full search)** | **~800** | **$0** | Nothing |
+| **AgentVault Memory (lite search)** | **~200** | **$0** | Nothing — summaries first, full on demand |
 
-**How it works under the hood:**
+### Built-in Token Optimizations
+
+Every MCP search response goes through 5 optimizations before reaching your AI:
+
+| Optimization | What It Does | Token Savings |
+|-------------|-------------|:---:|
+| **Summary-first search** | `vault_search_lite` returns one-line summaries, not full content. AI fetches full content only for what it needs | **~80%** |
+| **Tool noise stripping** | Removes `[Used tools: Read]`, `[Tools used: Edit]` artifacts | **10-15%** |
+| **Code block truncation** | Long code blocks trimmed to 4 lines + `(truncated)` | **20-30%** |
+| **Result deduplication** | Near-identical results from the same session are merged | **15-20%** |
+| **Compact metadata** | One-line format instead of 4 separate lines per result | **75%** |
+
+### How It Works
 
 ```
-You: "How did we handle rate limiting in my-saas-app?"
+You: "How did we handle rate limiting?"
       │
-      ▼ Claude calls vault_search via MCP
+      ▼ AI calls vault_search_lite (summaries only, ~200 tokens)
       │
-      ▼ ChromaDB: embed query → HNSW index → find 5 nearest chunks
-      │           filter by project="my-saas-app"
-      │           ~30ms, zero API calls
+      ▼ Sees: "#1 78% — my-saas-app | claude-code | 2026-03-15"
+      │        "    Implemented rate limiting using upstash..."
       │
-      ▼ Returns ~1,500 tokens of relevant conversation
+      ▼ AI calls vault_search for full details on result #1 (~300 tokens)
       │
-Claude: "In your March 15 session, you implemented rate limiting
-         using upstash/ratelimit with Redis..."
+      ▼ Total: ~500 tokens (vs ~1,500 without optimization)
 ```
 
-**10 searches in a session = ~15,000 tokens. That's 92% of a 200K context window still free for actual work.**
+**10 searches in a session = ~5,000 tokens. That's 97% of a 200K context window still free for actual work.**
 
-The search is local (ChromaDB + HNSW index on your machine), the embedding model runs locally (~80MB, downloaded once), and no data ever leaves your machine.
+Everything runs locally — ChromaDB + HNSW index on your machine, embedding model (~80MB, downloaded once), no data ever leaves your machine.
 
 ## How It Works
 
@@ -161,13 +171,14 @@ Secrets (API keys, tokens, passwords, private keys, connection strings) are auto
 
 After `init`, your AI tools have these search tools available via MCP:
 
-| Tool | What It Does |
-|------|-------------|
-| `vault_search` | Semantic search with project/source/branch filters |
-| `vault_project_context` | "What have I done on project X recently?" |
-| `vault_cross_reference` | "Did I solve this problem before in another project?" |
-| `vault_decisions` | "What decisions did I make about auth?" |
-| `vault_status` | Overview of indexed sessions and projects |
+| Tool | What It Does | Tokens |
+|------|-------------|:---:|
+| `vault_search_lite` | **Start here** — returns one-line summaries, not full content | ~200 |
+| `vault_search` | Full semantic search with project/source/branch filters | ~800 |
+| `vault_project_context` | "What have I done on project X recently?" | ~800 |
+| `vault_cross_reference` | "Did I solve this problem before in another project?" | ~800 |
+| `vault_decisions` | "What decisions did I make about auth?" | ~500 |
+| `vault_status` | Overview of indexed sessions and projects | ~100 |
 
 Your AI calls these automatically when you ask questions like:
 - *"Remember that auth bug we fixed last week?"*
