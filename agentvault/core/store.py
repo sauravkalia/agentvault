@@ -69,8 +69,14 @@ class VaultStore:
     project: Optional[str] = None,
     source: Optional[str] = None,
     git_branch: Optional[str] = None,
+    min_relevance: float = 0.0,
   ) -> list[dict]:
-    """Semantic search with optional metadata filters."""
+    """Semantic search with optional metadata filters.
+
+    Args:
+      min_relevance: Minimum relevance score (0.0-1.0). Results below
+                     this threshold are filtered out. Default 0.0 (no filter).
+    """
     where_filters = {}
     if project:
       where_filters["project"] = project
@@ -87,11 +93,18 @@ class VaultStore:
 
     hits = []
     for i in range(len(results["ids"][0])):
+      distance = results["distances"][0][i] if results.get("distances") else None
+      # Filter by relevance threshold (distance is cosine: 0=identical, 2=opposite)
+      if distance is not None and min_relevance > 0:
+        relevance = 1 - distance
+        if relevance < min_relevance:
+          continue
+
       hits.append({
         "id": results["ids"][0][i],
         "content": results["documents"][0][i],
         "metadata": results["metadatas"][0][i],
-        "distance": results["distances"][0][i] if results.get("distances") else None,
+        "distance": distance,
       })
     return hits
 

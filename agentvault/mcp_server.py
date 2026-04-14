@@ -25,6 +25,7 @@ JSONRPC_VERSION = "2.0"
 MAX_TOP_K = 50
 MAX_QUERY_LENGTH = 10_000
 MAX_LINE_LENGTH = 1_000_000  # 1MB per line
+DEFAULT_MIN_RELEVANCE = 0.25  # Drop results below 25% relevance
 
 
 def _make_response(id: Any, result: Any) -> dict:
@@ -164,6 +165,14 @@ def _get_tools() -> list[dict]:
         },
       },
     },
+    {
+      "name": "vault_wake_up",
+      "description": "Call this ONCE at session start. Returns a tiny context summary (~50 tokens) of recent projects and activity. Costs almost nothing and gives you baseline awareness of what the user has been working on.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+      },
+    },
   ]
 
 
@@ -228,6 +237,7 @@ class MCPServer:
           top_k=top_k,
           project=project,
           source=source,
+          min_relevance=DEFAULT_MIN_RELEVANCE,
         )
         text = self._format_search_results(results)
 
@@ -237,12 +247,18 @@ class MCPServer:
         if topic:
           _validate_string(topic, "topic")
         query = topic or f"recent work on {project}"
-        results = self.store.search(query=query, top_k=8, project=project)
+        results = self.store.search(
+          query=query, top_k=8, project=project,
+          min_relevance=DEFAULT_MIN_RELEVANCE,
+        )
         text = self._format_search_results(results)
 
       elif tool_name == "vault_cross_reference":
         query = _validate_string(args.get("query", ""), "query")
-        results = self.store.search(query=query, top_k=10)
+        results = self.store.search(
+          query=query, top_k=10,
+          min_relevance=DEFAULT_MIN_RELEVANCE,
+        )
         text = self._format_search_results(results)
 
       elif tool_name == "vault_search_lite":
@@ -254,6 +270,7 @@ class MCPServer:
 
         results = self.store.search(
           query=query, top_k=top_k, project=project,
+          min_relevance=DEFAULT_MIN_RELEVANCE,
         )
         results = dedup_results(results)
 
@@ -287,6 +304,26 @@ class MCPServer:
             "for full content of specific results."
           )
           text = "\n".join(lines)
+
+      elif tool_name == "vault_wake_up":
+        stats = self.store.get_stats()
+        if stats["total_chunks"] == 0:
+          text = "Vault is empty. No prior session history available."
+        else:
+          # Compact summary: projects with chunk counts, sorted by activity
+          proj = stats.get("projects_detail", {})
+          top_projects = list(proj.keys())[:5]
+          src = stats.get("sources_detail", {})
+          sessions = stats.get("total_sessions", 0)
+
+          lines = [
+            f"Memory: {sessions} sessions, "
+            f"{stats['total_chunks']} chunks.",
+            f"Sources: {', '.join(f'{s}({c})' for s, c in src.items())}.",
+            f"Active projects: {', '.join(top_projects)}.",
+            "Use vault_search_lite to find specific conversations.",
+          ]
+          text = " ".join(lines)
 
       elif tool_name == "vault_status":
         stats = self.store.get_stats()

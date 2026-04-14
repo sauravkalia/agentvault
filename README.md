@@ -173,12 +173,15 @@ After `init`, your AI tools have these search tools available via MCP:
 
 | Tool | What It Does | Tokens |
 |------|-------------|:---:|
-| `vault_search_lite` | **Start here** — returns one-line summaries, not full content | ~200 |
+| `vault_wake_up` | **Call once at session start** — tiny context summary of recent projects and activity | **~50** |
+| `vault_search_lite` | Returns one-line summaries, not full content. Use for initial scan | ~200 |
 | `vault_search` | Full semantic search with project/source/branch filters | ~800 |
 | `vault_project_context` | "What have I done on project X recently?" | ~800 |
 | `vault_cross_reference` | "Did I solve this problem before in another project?" | ~800 |
 | `vault_decisions` | "What decisions did I make about auth?" | ~500 |
 | `vault_status` | Overview of indexed sessions and projects | ~100 |
+
+All search tools automatically filter out results below 25% relevance — no wasted tokens on irrelevant matches.
 
 Your AI calls these automatically when you ask questions like:
 - *"Remember that auth bug we fixed last week?"*
