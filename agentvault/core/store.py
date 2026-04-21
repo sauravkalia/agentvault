@@ -24,7 +24,9 @@ class VaultStore:
     persist_dir: Optional[Path] = None,
     collection_name: str = DEFAULT_COLLECTION_NAME,
   ):
-    self.persist_dir = persist_dir or DEFAULT_CHROMADB_DIR
+    persist_dir = persist_dir or DEFAULT_CHROMADB_DIR
+    # Accept either str or Path — convert to Path
+    self.persist_dir = Path(persist_dir) if not isinstance(persist_dir, Path) else persist_dir
     self.persist_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     # Ensure restrictive permissions even if directory already existed
     self.persist_dir.chmod(0o700)

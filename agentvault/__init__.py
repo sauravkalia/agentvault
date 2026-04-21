@@ -12,4 +12,4 @@ import logging
 logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
 logging.getLogger("posthog").setLevel(logging.CRITICAL)
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
