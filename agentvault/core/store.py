@@ -16,6 +16,23 @@ from agentvault.config import DEFAULT_CHROMADB_DIR, DEFAULT_COLLECTION_NAME
 from agentvault.core.schema import Chunk
 
 
+def _age_in_days(timestamp: Optional[str]) -> Optional[float]:
+  """Parse an ISO timestamp and return age in days. None on failure."""
+  if not timestamp:
+    return None
+  try:
+    from datetime import datetime, timezone
+    ts = timestamp.rstrip("Z")
+    dt = datetime.fromisoformat(ts)
+    if dt.tzinfo is None:
+      dt = dt.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    delta = (now - dt).total_seconds() / 86400.0
+    return max(delta, 0.0)
+  except Exception:
+    return None
+
+
 class VaultStore:
   """Manages ChromaDB storage for conversation chunks."""
 
@@ -72,12 +89,17 @@ class VaultStore:
     source: Optional[str] = None,
     git_branch: Optional[str] = None,
     min_relevance: float = 0.0,
+    time_decay: bool = False,
+    half_life_days: float = 30.0,
   ) -> list[dict]:
-    """Semantic search with optional metadata filters.
+    """Semantic search with optional metadata filters and time-decay rerank.
 
     Args:
       min_relevance: Minimum relevance score (0.0-1.0). Results below
                      this threshold are filtered out. Default 0.0 (no filter).
+      time_decay: When True, re-rank by relevance * exp(-age_days/half_life_days)
+                  so recent sessions outrank old ones at equal relevance.
+      half_life_days: Age (days) at which a result's score is halved.
     """
     where_filters = {}
     if project:
@@ -87,9 +109,12 @@ class VaultStore:
     if git_branch:
       where_filters["git_branch"] = git_branch
 
+    # Pull a wider candidate set when re-ranking so trim doesn't drop fresh hits
+    fetch_k = top_k * 3 if time_decay else top_k
+
     results = self.collection.query(
       query_texts=[query],
-      n_results=top_k,
+      n_results=fetch_k,
       where=where_filters if where_filters else None,
     )
 
@@ -102,12 +127,29 @@ class VaultStore:
         if relevance < min_relevance:
           continue
 
-      hits.append({
+      meta = results["metadatas"][0][i]
+      hit = {
         "id": results["ids"][0][i],
         "content": results["documents"][0][i],
-        "metadata": results["metadatas"][0][i],
+        "metadata": meta,
         "distance": distance,
-      })
+      }
+
+      if time_decay:
+        relevance = (1 - distance) if distance is not None else 0.5
+        age_days = _age_in_days(meta.get("timestamp"))
+        if age_days is not None:
+          import math
+          hit["score"] = relevance * math.exp(-age_days / half_life_days)
+        else:
+          hit["score"] = relevance
+
+      hits.append(hit)
+
+    if time_decay:
+      hits.sort(key=lambda h: -h.get("score", 0.0))
+      hits = hits[:top_k]
+
     return hits
 
   def get_stats(self) -> dict:

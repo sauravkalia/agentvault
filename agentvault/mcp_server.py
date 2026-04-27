@@ -250,6 +250,7 @@ class MCPServer:
         results = self.store.search(
           query=query, top_k=8, project=project,
           min_relevance=DEFAULT_MIN_RELEVANCE,
+          time_decay=True,
         )
         text = self._format_search_results(results)
 
@@ -271,6 +272,7 @@ class MCPServer:
         results = self.store.search(
           query=query, top_k=top_k, project=project,
           min_relevance=DEFAULT_MIN_RELEVANCE,
+          time_decay=True,
         )
         results = dedup_results(results)
 

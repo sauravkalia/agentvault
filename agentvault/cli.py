@@ -148,6 +148,38 @@ def _install_auto_save_hook():
   _atomic_json_write(claude_settings, settings)
 
 
+def _install_session_start_hook():
+  """Install Claude Code SessionStart hook to auto-inject wake-up context."""
+  import shutil
+
+  agentvault_cmd = shutil.which("agentvault") or "agentvault"
+  claude_settings = Path.home() / ".claude" / "settings.json"
+
+  if not claude_settings.parent.exists():
+    return
+
+  settings = _load_json_with_backup(claude_settings)
+
+  hooks = settings.setdefault("hooks", {})
+  start_hooks = hooks.setdefault("SessionStart", [])
+
+  for hook_entry in start_hooks:
+    for h in hook_entry.get("hooks", []):
+      if "session-start" in h.get("command", ""):
+        return  # Already installed
+
+  start_hooks.append({
+    "matcher": "",
+    "hooks": [{
+      "type": "command",
+      "command": f"{agentvault_cmd} session-start",
+      "timeout": 5000,
+    }],
+  })
+
+  _atomic_json_write(claude_settings, settings)
+
+
 def _install_inject_context_hook():
   """Install Claude Code UserPromptSubmit hook for context injection."""
   import shutil
@@ -285,6 +317,17 @@ def init(obsidian: str | None):
     console.print(
       "    [green]\u2713[/green] Installed — relevant past context "
       "will be injected before each prompt"
+    )
+  except Exception as e:
+    console.print(f"    [yellow]![/yellow] Could not install: {e}")
+
+  # Auto-install session-start hook
+  console.print("\n  [bold]Session-Start Hook:[/bold]")
+  try:
+    _install_session_start_hook()
+    console.print(
+      "    [green]\u2713[/green] Installed \u2014 wake-up context "
+      "will be injected when sessions start"
     )
   except Exception as e:
     console.print(f"    [yellow]![/yellow] Could not install: {e}")
@@ -614,6 +657,82 @@ def export(output: str, fmt: str, project: str | None):
   )
 
 
+@cli.command(name="session-start")
+def session_start():
+  """SessionStart hook — emit wake-up + project context for new sessions."""
+  import sys
+
+  try:
+    event = json.loads(sys.stdin.read() or "{}")
+  except Exception:
+    event = {}
+
+  cwd = event.get("cwd") or ""
+  project = Path(cwd).name if cwd else None
+
+  config = load_config()
+  if config.get("auto_inject") is False:
+    sys.exit(0)
+
+  try:
+    from agentvault.core.store import VaultStore
+    store = VaultStore(persist_dir=config.get("chromadb_dir"))
+    stats = store.get_stats()
+  except Exception:
+    sys.exit(0)
+
+  if stats["total_chunks"] == 0:
+    sys.exit(0)
+
+  lines = []
+  src = stats.get("sources_detail", {})
+  top_projects = list(stats.get("projects_detail", {}).keys())[:5]
+  lines.append(
+    f"AgentVault Memory: {stats.get('total_sessions', 0)} sessions, "
+    f"{stats['total_chunks']} chunks indexed."
+  )
+  if src:
+    src_str = ", ".join(f"{s}({c})" for s, c in src.items())
+    lines.append(f"Sources: {src_str}.")
+  if top_projects:
+    lines.append(f"Active projects: {', '.join(top_projects)}.")
+
+  if project:
+    try:
+      results = store.search(
+        query=f"recent work on {project}",
+        top_k=3,
+        project=project,
+        min_relevance=0.30,
+        time_decay=True,
+      )
+    except Exception:
+      results = []
+
+    if results:
+      lines.append(f"\nRecent activity in **{project}**:")
+      for r in results:
+        meta = r.get("metadata") or {}
+        ts = (meta.get("timestamp") or "")[:10]
+        snippet = (r.get("content") or "").replace("\n", " ").strip()
+        if len(snippet) > 180:
+          snippet = snippet[:180] + "..."
+        lines.append(f"- [{ts}] {snippet}")
+
+  lines.append(
+    "\n_Use `vault_search_lite` for past conversations, "
+    "`vault_decisions` for past decisions._"
+  )
+
+  output = {
+    "hookSpecificOutput": {
+      "hookEventName": "SessionStart",
+      "additionalContext": "\n".join(lines),
+    }
+  }
+  print(json.dumps(output))
+
+
 @cli.command(name="inject-context")
 def inject_context():
   """UserPromptSubmit hook \u2014 inject relevant past context before user's prompt.
@@ -722,6 +841,15 @@ def mcp_install():
     _install_inject_context_hook()
     console.print(
       "    [green]\u2713[/green] Claude Code UserPromptSubmit hook installed"
+    )
+  except Exception as e:
+    console.print(f"    [yellow]![/yellow] {e}")
+
+  console.print("\n  [bold]Installing session-start hook:[/bold]")
+  try:
+    _install_session_start_hook()
+    console.print(
+      "    [green]\u2713[/green] Claude Code SessionStart hook installed"
     )
   except Exception as e:
     console.print(f"    [yellow]![/yellow] {e}")
