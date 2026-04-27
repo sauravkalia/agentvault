@@ -21,6 +21,7 @@ ALLOWED_CONFIG_KEYS = {
   "obsidian_vault": (str, type(None)),
   "adapters": dict,
   "auto_sync": bool,
+  "auto_inject": bool,
   "chunk_max_tokens": int,
   "last_ingest_timestamp": dict,
 }
@@ -40,6 +41,7 @@ def get_default_config() -> dict[str, Any]:
       "codex": {"enabled": True, "history_path": None},
     },
     "auto_sync": False,
+    "auto_inject": True,
     "chunk_max_tokens": 800,
     "last_ingest_timestamp": {},
   }

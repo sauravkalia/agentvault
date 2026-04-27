@@ -148,6 +148,38 @@ def _install_auto_save_hook():
   _atomic_json_write(claude_settings, settings)
 
 
+def _install_inject_context_hook():
+  """Install Claude Code UserPromptSubmit hook for context injection."""
+  import shutil
+
+  agentvault_cmd = shutil.which("agentvault") or "agentvault"
+  claude_settings = Path.home() / ".claude" / "settings.json"
+
+  if not claude_settings.parent.exists():
+    return
+
+  settings = _load_json_with_backup(claude_settings)
+
+  hooks = settings.setdefault("hooks", {})
+  submit_hooks = hooks.setdefault("UserPromptSubmit", [])
+
+  for hook_entry in submit_hooks:
+    for h in hook_entry.get("hooks", []):
+      if "inject-context" in h.get("command", ""):
+        return  # Already installed
+
+  submit_hooks.append({
+    "matcher": "",
+    "hooks": [{
+      "type": "command",
+      "command": f"{agentvault_cmd} inject-context",
+      "timeout": 5000,
+    }],
+  })
+
+  _atomic_json_write(claude_settings, settings)
+
+
 @click.group()
 @click.version_option(package_name="agentvault-memory")
 def cli():
@@ -242,6 +274,17 @@ def init(obsidian: str | None):
     console.print(
       "    [green]\u2713[/green] Installed — new sessions "
       "will be ingested automatically"
+    )
+  except Exception as e:
+    console.print(f"    [yellow]![/yellow] Could not install: {e}")
+
+  # Auto-install context-injection hook
+  console.print("\n  [bold]Context-Injection Hook:[/bold]")
+  try:
+    _install_inject_context_hook()
+    console.print(
+      "    [green]\u2713[/green] Installed — relevant past context "
+      "will be injected before each prompt"
     )
   except Exception as e:
     console.print(f"    [yellow]![/yellow] Could not install: {e}")
@@ -571,9 +614,90 @@ def export(output: str, fmt: str, project: str | None):
   )
 
 
+@cli.command(name="inject-context")
+def inject_context():
+  """UserPromptSubmit hook \u2014 inject relevant past context before user's prompt.
+
+  Reads Claude Code hook event JSON from stdin, searches the vault for relevant
+  past context, and emits a JSON envelope that Claude Code injects into the
+  conversation. Designed to be fast and silent \u2014 fails open on any error.
+  """
+  import sys
+
+  INTERJECTIONS = {
+    "yes", "no", "ok", "okay", "continue", "go", "do it",
+    "please", "yep", "nope", "sure", "cancel", "stop",
+  }
+  MAX_RESULTS = 3
+  MIN_RELEVANCE = 0.35
+  SNIPPET_LEN = 220
+
+  try:
+    event = json.loads(sys.stdin.read() or "{}")
+  except Exception:
+    sys.exit(0)
+
+  prompt = (event.get("prompt") or "").strip()
+  cwd = event.get("cwd") or ""
+  current_session = event.get("session_id") or ""
+
+  if len(prompt) < 8 or prompt.lower() in INTERJECTIONS:
+    sys.exit(0)
+
+  config = load_config()
+  if config.get("auto_inject") is False:
+    sys.exit(0)
+
+  project = Path(cwd).name if cwd else None
+
+  try:
+    from agentvault.core.store import VaultStore
+    store = VaultStore(persist_dir=config.get("chromadb_dir"))
+    results = store.search(
+      query=prompt,
+      top_k=MAX_RESULTS + 2,  # buffer to allow filtering current session
+      project=project,
+      min_relevance=MIN_RELEVANCE,
+    )
+  except Exception:
+    sys.exit(0)
+
+  if current_session:
+    results = [
+      r for r in results
+      if (r.get("metadata") or {}).get("session_id") != current_session
+    ]
+  results = results[:MAX_RESULTS]
+
+  if not results:
+    sys.exit(0)
+
+  lines = ["## Relevant past context (from AgentVault Memory):"]
+  for r in results:
+    meta = r.get("metadata") or {}
+    proj = meta.get("project", "?")
+    src = meta.get("source", "?")
+    ts = (meta.get("timestamp") or "")[:10]
+    snippet = (r.get("content") or "").replace("\n", " ").strip()
+    if len(snippet) > SNIPPET_LEN:
+      snippet = snippet[:SNIPPET_LEN] + "\u2026"
+    lines.append(f"- [{proj} \u00b7 {src} \u00b7 {ts}] {snippet}")
+  lines.append(
+    "_If a result looks relevant, call `vault_search` for full content._"
+  )
+
+  output = {
+    "hookSpecificOutput": {
+      "hookEventName": "UserPromptSubmit",
+      "additionalContext": "\n".join(lines),
+    }
+  }
+  print(json.dumps(output))
+
+
 @cli.command(name="mcp-install")
 def mcp_install():
-  """Install AgentVault MCP server + auto-save hook."""
+  """Install AgentVault MCP server + auto-save + context-injection hooks."""
   console.print("\n  [bold]Installing MCP server:[/bold]")
   mcp_tools = _get_mcp_supported_tools()
   if mcp_tools:
@@ -589,7 +713,16 @@ def mcp_install():
   console.print("\n  [bold]Installing auto-save hook:[/bold]")
   try:
     _install_auto_save_hook()
-    console.print("    [green]\u2713[/green] Claude Code stop hook installed")
+    console.print("    [green]\u2713[/green] Claude Code Stop hook installed")
+  except Exception as e:
+    console.print(f"    [yellow]![/yellow] {e}")
+
+  console.print("\n  [bold]Installing context-injection hook:[/bold]")
+  try:
+    _install_inject_context_hook()
+    console.print(
+      "    [green]\u2713[/green] Claude Code UserPromptSubmit hook installed"
+    )
   except Exception as e:
     console.print(f"    [yellow]![/yellow] {e}")
 
