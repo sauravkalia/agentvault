@@ -12,6 +12,13 @@ from agentvault.core.decisions import extract_decisions
 from agentvault.core.redactor import redact_secrets
 from agentvault.core.schema import AgentSession
 
+# Size caps to keep Obsidian's indexer / CodeMirror editor responsive.
+# Obsidian reliably hangs on individual markdown files >2 MB; we target well under that.
+MAX_BYTES_PER_EXCHANGE = 2000
+MAX_TRANSCRIPT_BYTES = 800_000
+MAX_EXCHANGES_HEAD = 30
+MAX_EXCHANGES_TAIL = 30
+
 
 def _relativize_path(file_path: str, working_dir: str) -> str:
   """Make absolute path relative to working directory for display."""
@@ -25,6 +32,20 @@ def _relativize_path(file_path: str, working_dir: str) -> str:
 def _sanitize_path_component(name: str) -> str:
   """Remove path separators, null bytes, and '..' from a path component."""
   return re.sub(r'[^\w\-.]', '_', name).strip('.')
+
+
+def _truncate_utf8(s: str, limit: int) -> str:
+  """Truncate `s` to roughly `limit` bytes without splitting a UTF-8 character."""
+  encoded = s.encode("utf-8")
+  if len(encoded) <= limit:
+    return s
+  cut = encoded[:limit]
+  # Walk back across any UTF-8 continuation bytes so we don't slice mid-codepoint.
+  while cut and (cut[-1] & 0xC0) == 0x80:
+    cut = cut[:-1]
+  truncated = cut.decode("utf-8", errors="ignore")
+  omitted = len(encoded) - len(cut)
+  return f"{truncated}\n\n*[truncated — {omitted} bytes omitted; full content in ChromaDB]*"
 
 
 def _format_frontmatter(session: AgentSession) -> str:
@@ -46,26 +67,67 @@ def _format_frontmatter(session: AgentSession) -> str:
   return "\n".join(lines)
 
 
+def _format_one_exchange(ex) -> Optional[str]:
+  """Render a single exchange as a markdown block, capped at MAX_BYTES_PER_EXCHANGE."""
+  content = _truncate_utf8(redact_secrets(ex.content), MAX_BYTES_PER_EXCHANGE)
+  if ex.role == "human":
+    return f"### You\n{content}"
+  if ex.role == "assistant":
+    tool_note = ""
+    if ex.tool_calls:
+      tools = ", ".join(tc.name for tc in ex.tool_calls)
+      tool_note = f"\n> Tools: {tools}"
+    return f"### Assistant{tool_note}\n{content}"
+  return None
+
+
 def _format_exchange_markdown(session: AgentSession) -> str:
-  """Format exchanges as readable markdown."""
-  parts = []
-  for ex in session.exchanges:
-    if ex.role == "human":
-      parts.append(f"### You\n{redact_secrets(ex.content)}")
-    elif ex.role == "assistant":
-      # Truncate very long assistant responses for readability
-      content = redact_secrets(ex.content)
-      if len(content) > 2000:
-        content = content[:2000] + "\n\n*[truncated — full content in ChromaDB]*"
+  """Format exchanges as readable markdown, capping per-exchange and total size.
 
-      tool_note = ""
-      if ex.tool_calls:
-        tools = ", ".join(tc.name for tc in ex.tool_calls)
-        tool_note = f"\n> Tools: {tools}"
+  Long sessions on big codebases used to produce 10+ MB markdown files that
+  hung Obsidian's indexer. We now:
+    * truncate each exchange to MAX_BYTES_PER_EXCHANGE,
+    * keep only the first/last MAX_EXCHANGES_HEAD + MAX_EXCHANGES_TAIL exchanges
+      (with a single skip marker in the middle when truncated), and
+    * hard-cap the rendered transcript at MAX_TRANSCRIPT_BYTES as a final guard.
+  Full content remains queryable via ChromaDB; the vault file is just the
+  human-browsable surface.
+  """
+  exchanges = session.exchanges
 
-      parts.append(f"### Assistant{tool_note}\n{content}")
+  if len(exchanges) > MAX_EXCHANGES_HEAD + MAX_EXCHANGES_TAIL:
+    omitted = len(exchanges) - MAX_EXCHANGES_HEAD - MAX_EXCHANGES_TAIL
+    head = exchanges[:MAX_EXCHANGES_HEAD]
+    tail = exchanges[-MAX_EXCHANGES_TAIL:]
+  else:
+    omitted = 0
+    head = exchanges
+    tail = []
 
-  return "\n\n---\n\n".join(parts)
+  parts: list[str] = []
+  for ex in head:
+    block = _format_one_exchange(ex)
+    if block:
+      parts.append(block)
+
+  if omitted:
+    parts.append(
+      f"*[{omitted} exchanges omitted to keep Obsidian responsive — full content in ChromaDB]*"
+    )
+
+  for ex in tail:
+    block = _format_one_exchange(ex)
+    if block:
+      parts.append(block)
+
+  transcript = "\n\n---\n\n".join(parts)
+
+  # Final safety net: hard cap even after per-exchange truncation, in case of
+  # pathologically large surviving content (huge code blocks, JSON dumps, etc.).
+  if len(transcript.encode("utf-8")) > MAX_TRANSCRIPT_BYTES:
+    transcript = _truncate_utf8(transcript, MAX_TRANSCRIPT_BYTES)
+
+  return transcript
 
 
 def write_session(

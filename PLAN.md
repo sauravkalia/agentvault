@@ -1,6 +1,17 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.8.0**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.8.1**.
+
+---
+
+## v0.8.1 — Vault size caps (✅ shipped 2026-05-12)
+
+Hotfix: long Claude Code sessions on big codebases produced 10+ MB markdown files that hung Obsidian's indexer and graph view on startup. Writer now:
+- truncates each exchange at 2 KB,
+- keeps only the first 30 + last 30 exchanges with a single skip marker when a session has more,
+- hard-caps total transcript at 800 KB as a final safety net.
+
+Full content remains queryable via ChromaDB. Existing oversized files in the vault are not touched by this change — clean them up manually or with `agentvault sync --rewrite` (future).
 
 ---
 
