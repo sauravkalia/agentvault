@@ -1098,6 +1098,43 @@ def decisions(project: str | None, export_path: str | None):
 
 
 @cli.command()
+@click.option(
+  "--older-than-days", type=int, default=180,
+  help="Archive sessions whose newest chunk is older than this many days",
+)
+@click.option("--project", "-p", type=str, default=None, help="Limit to one project")
+@click.option(
+  "--dry-run", is_flag=True, default=False,
+  help="Report what would change without modifying the store",
+)
+def archive(older_than_days: int, project: str | None, dry_run: bool):
+  """Condense old sessions into a single summary chunk each (TTL purge)."""
+  from agentvault.core.archive import archive_old_sessions
+  from agentvault.core.store import VaultStore
+
+  store = VaultStore()
+  stats = archive_old_sessions(
+    store, older_than_days=older_than_days, project=project, dry_run=dry_run,
+  )
+
+  saved = stats["bytes_before"] - stats["bytes_after"]
+  saved_kb = saved / 1024.0
+  console.print()
+  console.print(
+    f"  [bold]Archive {'(dry run) ' if dry_run else ''}— "
+    f"{stats['sessions_archived']} sessions condensed[/bold]"
+  )
+  console.print(
+    f"    considered     {stats['sessions_considered']}\n"
+    f"    archived       {stats['sessions_archived']}\n"
+    f"    already done   {stats['sessions_already_archived']}\n"
+    f"    chunks removed {stats['chunks_removed']}\n"
+    f"    chunks added   {stats['chunks_added']}\n"
+    f"    bytes saved    {saved} ({saved_kb:.1f} KB)\n"
+  )
+
+
+@cli.command()
 @click.option("--host", type=str, default="127.0.0.1", help="Host to bind")
 @click.option("--port", type=int, default=3777, help="Port to bind")
 def serve(host: str, port: int):

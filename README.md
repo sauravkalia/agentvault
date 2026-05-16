@@ -122,9 +122,21 @@ agentvault search "why did we switch to GraphQL"
 agentvault search "auth bug" --project my-saas-app
 agentvault search "rate limiting" --source claude-code
 
+# Pattern intelligence — surface recurring problems, open TODOs, candidate rules
+agentvault patterns --min-sessions 3
+agentvault todos --unresolved
+agentvault rules
+
 # View decisions extracted from your conversations
 agentvault decisions
 agentvault decisions --project my-saas-app
+
+# Browse the vault locally in your browser (requires `pip install agentvault-memory[ui]`)
+agentvault serve  # → http://127.0.0.1:3777
+
+# TTL — condense sessions older than N days into one summary chunk each
+agentvault archive --older-than-days 180 --dry-run
+agentvault archive --older-than-days 180
 
 # Incremental sync — only new sessions since last run
 agentvault sync
@@ -145,10 +157,10 @@ That's it. Two commands to set up, then it runs automatically.
 
 ### What `init` does
 
-1. **Detects AI tools** — scans for Claude Code, OpenCode, Codex, Cursor history
+1. **Detects AI tools** — scans for Claude Code, OpenCode, Codex, Cursor, Aider history
 2. **Auto-detects Obsidian** — finds your vault by looking for `.obsidian/` in common locations
 3. **Installs MCP server** — for every detected tool that supports MCP (Claude Code, Cursor, OpenCode)
-4. **Installs auto-save hook** — Claude Code Stop hook that ingests new sessions automatically
+4. **Installs hooks** — Claude Code Stop (auto-save), UserPromptSubmit (context injection), SessionStart (wake-up), PreToolUse (per-file context surfacing)
 
 No manual `--obsidian` flag or `mcp-install` needed. Everything is auto-detected.
 
@@ -174,14 +186,17 @@ After `init`, your AI tools have these search tools available via MCP:
 | Tool | What It Does | Tokens |
 |------|-------------|:---:|
 | `vault_wake_up` | **Call once at session start** — tiny context summary of recent projects and activity | **~50** |
-| `vault_search_lite` | Returns one-line summaries, not full content. Use for initial scan | ~200 |
-| `vault_search` | Full semantic search with project/source/branch filters | ~800 |
-| `vault_project_context` | "What have I done on project X recently?" | ~800 |
+| `vault_search_lite` | One-line summaries via hybrid (BM25 + vector) search. Use for initial scan | ~200 |
+| `vault_search` | Full hybrid search with project / source / branch filters | ~800 |
+| `vault_project_context` | "What have I done on project X recently?" — time-decay reranked | ~800 |
 | `vault_cross_reference` | "Did I solve this problem before in another project?" | ~800 |
 | `vault_decisions` | "What decisions did I make about auth?" | ~500 |
+| `vault_patterns` | "What problems have I debugged multiple times?" — recurring-problem clusters | ~400 |
+| `vault_todos` | "What was I supposed to come back to?" — open TODOs with resolution heuristic | ~500 |
+| `vault_rules` | "What corrections do I keep repeating?" — candidate CLAUDE.md rules | ~400 |
 | `vault_status` | Overview of indexed sessions and projects | ~100 |
 
-All search tools automatically filter out results below 25% relevance — no wasted tokens on irrelevant matches.
+All search tools default to **hybrid search** (FTS5 BM25 + ChromaDB cosine, normalized + weighted-sum combined) so exact strings — function names, error codes, file paths — land cleanly alongside semantic matches. Results below 25% relevance are filtered out automatically.
 
 Your AI calls these automatically when you ask questions like:
 - *"Remember that auth bug we fixed last week?"*
@@ -212,6 +227,7 @@ Each session file has YAML frontmatter (source, project, date, branch, tags) —
 | **OpenCode** | `~/.local/state/opencode/` (JSONL) | Yes | — |
 | **Codex (OpenAI)** | `~/.codex/sessions/` (JSONL) | — | — |
 | **Cursor** | `~/Library/Application Support/Cursor/` (SQLite) | Yes | — |
+| **Aider** | per-project `.aider.chat.history.md` (Markdown) | — | — |
 | ChatGPT | Planned (manual export) | — | — |
 
 ## Auto-Save (Future Sessions)
@@ -231,6 +247,30 @@ AgentVault Memory automatically extracts decisions from your conversations — "
 - **CLI:** `agentvault decisions` — view all extracted decisions, filter by project
 - **MCP:** `vault_decisions` tool — your AI can query past decisions mid-session
 - **Obsidian:** `## Key Decisions` section added to each session file
+
+## Pattern Intelligence
+
+Three heuristic detectors that turn session history into actionable signal:
+
+- **Recurring problems** — `agentvault patterns` / `vault_patterns`. Greedy Jaccard clustering on problem-flavor lines (errors / exceptions / "doesn't work") across sessions. Surfaces any cluster spanning ≥ 3 distinct sessions — "you've debugged this kind of thing 4 times."
+- **Stale TODOs** — `agentvault todos [--unresolved]` / `vault_todos`. Pulls out TODO / FIXME / "we should…" / "I'll come back to…" notes. Each TODO is marked resolved when a later chunk in the same project mentions wrapping it up (added / fixed / shipped / completed / …) with sufficient token overlap.
+- **Candidate rules** — `agentvault rules` / `vault_rules`. Pulls repeated user corrections ("don't add Co-Authored-By", "always run lint", "use named exports instead of default") and surfaces clusters with ≥ 3 occurrences as candidates worth promoting to CLAUDE.md.
+
+## Web Viewer
+
+Optional localhost UI for browsing the vault — install with `pip install agentvault-memory[ui]`.
+
+```bash
+agentvault serve   # → http://127.0.0.1:3777
+```
+
+Pages: home (stats + search box), `/search` (hybrid search results), `/projects` (list), `/projects/{name}` (sessions + open TODOs + recurring problems for that project), `/sessions/{id}` (all chunks for one session). Binds to loopback only by default.
+
+## TTL / Archive
+
+Long-running vaults get big. `agentvault archive --older-than-days 180` walks every session whose newest chunk is older than the cutoff and condenses it into a single chunk carrying the session's topic keywords + head/tail snippets. Idempotent (already-archived sessions are skipped via a `-archived` chunk-id sentinel), supports `--dry-run` and `--project`.
+
+The trade: vector recall on archived sessions drops to one chunk, but session-level facts ("we worked on X for Y in March") survive and the store stays small.
 
 ## Forget (Data Control)
 
@@ -277,21 +317,44 @@ agentvault/
   cli.py                  ← CLI (click + rich)
   config.py               ← ~/.agentvault/config.json
   mcp_server.py           ← MCP server (stdio transport)
+  web.py                  ← FastAPI viewer (optional, [ui] extras)
   core/
     schema.py             ← AgentSession, Exchange, Chunk
-    store.py              ← ChromaDB wrapper
+    store.py              ← ChromaDB + FTS5 facade, hybrid search
+    fts_index.py          ← SQLite FTS5 keyword index
     ingester.py           ← Session → chunks (with secret redaction)
     redactor.py           ← Secret pattern detection (15 patterns)
+    summarizer.py         ← Keyword extraction summaries
+    decisions.py          ← Decision extraction
+    patterns.py           ← Recurring-problem clustering
+    todos.py              ← TODO extraction + resolution heuristic
+    rules.py              ← Repeated-correction clustering
+    archive.py            ← TTL summarize-and-purge
   adapters/
     base.py               ← BaseAdapter interface
     claude_code.py        ← Claude Code JSONL parser
     opencode.py           ← OpenCode prompt history parser
     codex.py              ← Codex event-driven JSONL parser
     cursor.py             ← Cursor SQLite DB parser
+    aider.py              ← Aider .aider.chat.history.md parser
+  hooks/
+    file_context.py       ← PreToolUse per-file context helper
+    injection_log.py      ← UserPromptSubmit injection log
   writers/
     obsidian.py           ← Markdown + daily digests
     chromadb_writer.py    ← Batch ingestion + dedup
 ```
+
+## Stability (v1.0)
+
+As of v1.0.0, the following are considered stable and won't break in 1.x:
+
+- **CLI commands**: `init`, `ingest`, `sync`, `search`, `decisions`, `patterns`, `todos`, `rules`, `archive`, `serve`, `forget`, `export`, `status`, `mcp-install`, plus the hook commands (`session-start`, `inject-context`, `file-context`).
+- **MCP tool names**: `vault_wake_up`, `vault_search`, `vault_search_lite`, `vault_project_context`, `vault_cross_reference`, `vault_decisions`, `vault_patterns`, `vault_todos`, `vault_rules`, `vault_status`.
+- **`Chunk` schema** in `agentvault.core.schema`.
+- **Config file shape** at `~/.agentvault/config.json`.
+
+Any breaking change to the above after 1.0.0 will bump the major version. New fields / new commands / new tools are additive and may land in any minor release.
 
 ## Security
 

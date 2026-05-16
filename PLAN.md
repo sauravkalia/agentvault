@@ -1,6 +1,22 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.14.0**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v1.0.0**.
+
+---
+
+## v1.0.0 — Scale & polish (✅ shipped 2026-05-16)
+
+First stable release — CLI commands, MCP tool names, and the `Chunk` schema are now locked.
+
+- **TTL / archive** (`agentvault/core/archive.py`, `agentvault archive` CLI). Walks chunks older than `--older-than-days` (default 180), condenses each session into one summary chunk (topic keywords from `_extract_keywords` + head/tail snippets), deletes the raw chunks. Idempotent via a `-archived` chunk-id sentinel. Supports `--project` and `--dry-run`. Deletes propagate to FTS5 via the existing VaultStore facade.
+- **Documentation pass**: README rewrite covering hybrid search, hooks, web viewer, pattern intelligence, archive. New CHANGELOG.md with every release back to v0.4.0. New Stability section in README declaring the API surface that's locked.
+- **PyPI classifier** flipped from `Development Status :: 3 - Alpha` to `5 - Production/Stable`.
+
+### Deferred to a later release (explicitly out of scope for 1.0)
+
+- **Per-project Chroma sharding**. The existing project filter + FTS5 index already gives most of the cross-project ergonomics; a sharded facade is worth doing only if real-world load shows it matters. → 1.1 candidate.
+- **`agentvault tune`**. v0.14.0 started recording injection events in `~/.agentvault/injection_log.jsonl`. Calibration logic needs evidence of which injected chunks the assistant actually used — either a Stop-hook scan of the assistant's output or per-tool integration. → 1.1+.
+- **Profile-driven performance pass**. Hot-path optimization needs real 10k / 50k chunk vaults to measure against, not synthetic benchmarks. → ongoing.
 
 ---
 
@@ -116,15 +132,10 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v1.0.0 — Scale & polish (next)
+## Future (post-1.0)
 
-**Goal:** everything that has to be true to call this 1.0.
-
-- **Per-project sharding**: separate Chroma collection per project, fanned out under one VaultStore facade. Search across all by default; scope by project optional.
-- **TTL / auto-purge**: sessions older than `archive_after_days` (default 180) get summarized into a single condensed chunk; raw chunks moved to a cold-storage collection.
-- **Documentation pass**: README, in-repo docs, MCP tool descriptions all updated. Migration guide.
-- **Performance pass**: profile ingest + search at 10k / 50k chunks; optimize hot paths.
-- **Stable APIs**: lock the CLI, MCP tool names, and `Chunk` schema. Anything breaking after this is a major bump.
+- **v1.1.0** — Per-project sharding (only if measured cross-project search latency justifies the refactor) + `agentvault tune` (calibrates `MIN_RELEVANCE` from injection-log evidence).
+- Each future release continues to follow the principles below: one feature, fail open, hooks under ~150 tokens, every feature reversible via config, no co-author line in commits.
 
 ---
 
