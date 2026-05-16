@@ -1,6 +1,20 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.10.0**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.11.0**.
+
+---
+
+## v0.11.0 — Per-file context (PreToolUse hook) (✅ shipped 2026-05-16)
+
+Surfaces past discussion of a file just before Claude reads or edits it.
+
+- New `agentvault file-context` CLI consumes a Claude Code PreToolUse hook event, pulls `tool_input.file_path` (also handles `path` / `notebook_path`), and emits a `## Past discussion of <path>` block via the hook envelope.
+- Core logic in `agentvault/hooks/file_context.py` (`build_file_context`) — pure helper so it's testable without subprocess fixtures.
+- Search uses the file's **basename** as the query against hybrid mode (v0.9.0). Basenames tokenize cleanly under FTS5 and most past discussions reference files by short name; full paths get stripped of `/` and `.` by the unicode61 tokenizer anyway.
+- Project filter derived from `cwd` to keep noise down.
+- Throttle: `~/.agentvault/file_context_throttle.json` records last-injected timestamp per path; same path within 60s is skipped. Atomic writes, mode 0600, auto-pruned (old entries dropped, capped at 200 entries).
+- Hook installer registers `PreToolUse` with matcher `Read|Edit|Write|MultiEdit|NotebookEdit`. Wired into `init` and `mcp-install`. Skipped silently when `auto_inject = false`.
+- Fails open — any exception in the hook exits 0 so Claude Code is never blocked.
 
 ---
 
@@ -46,19 +60,7 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v0.11.0 — Per-file context (PreToolUse hook, next)
-
-**Goal:** when Claude is about to read/edit a file, surface what was previously discussed about that file.
-
-- New CLI: `agentvault file-context` (reads PreToolUse hook event, extracts `tool_input.file_path`).
-- Search vault for chunks mentioning that path (literal match + semantic).
-- Emit a short `## Past discussion of {path}` block via the hook envelope.
-- Throttle: skip if file was injected in the last N prompts (avoid duplication with `inject-context`).
-- Hook installer auto-registers PreToolUse with matchers `Read`, `Edit`, `Write`.
-
----
-
-## v0.12.0 — Pattern intelligence
+## v0.12.0 — Pattern intelligence (next)
 
 **Goal:** surface patterns across sessions, not just retrieve them.
 

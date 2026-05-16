@@ -212,6 +212,38 @@ def _install_inject_context_hook():
   _atomic_json_write(claude_settings, settings)
 
 
+def _install_file_context_hook():
+  """Install Claude Code PreToolUse hook for per-file context injection."""
+  import shutil
+
+  agentvault_cmd = shutil.which("agentvault") or "agentvault"
+  claude_settings = Path.home() / ".claude" / "settings.json"
+
+  if not claude_settings.parent.exists():
+    return
+
+  settings = _load_json_with_backup(claude_settings)
+
+  hooks = settings.setdefault("hooks", {})
+  pre_tool_hooks = hooks.setdefault("PreToolUse", [])
+
+  for hook_entry in pre_tool_hooks:
+    for h in hook_entry.get("hooks", []):
+      if "file-context" in h.get("command", ""):
+        return  # Already installed
+
+  pre_tool_hooks.append({
+    "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit",
+    "hooks": [{
+      "type": "command",
+      "command": f"{agentvault_cmd} file-context",
+      "timeout": 3000,
+    }],
+  })
+
+  _atomic_json_write(claude_settings, settings)
+
+
 @click.group()
 @click.version_option(package_name="agentvault-memory")
 def cli():
@@ -330,6 +362,17 @@ def init(obsidian: str | None):
     console.print(
       "    [green]\u2713[/green] Installed \u2014 wake-up context "
       "will be injected when sessions start"
+    )
+  except Exception as e:
+    console.print(f"    [yellow]![/yellow] Could not install: {e}")
+
+  # Auto-install per-file-context hook
+  console.print("\n  [bold]File-Context Hook:[/bold]")
+  try:
+    _install_file_context_hook()
+    console.print(
+      "    [green]\u2713[/green] Installed \u2014 past discussion "
+      "of a file will be injected before Read/Edit/Write"
     )
   except Exception as e:
     console.print(f"    [yellow]![/yellow] Could not install: {e}")
@@ -820,6 +863,65 @@ def inject_context():
   print(json.dumps(output))
 
 
+@cli.command(name="file-context")
+def file_context():
+  """PreToolUse hook — surface past discussion of the file Claude is about to touch.
+
+  Reads the PreToolUse hook event JSON from stdin, pulls `tool_input.file_path`
+  out, queries the vault for prior context, and emits a Claude Code hook
+  envelope. Throttled per-file so consecutive Read+Edit on the same file
+  don't double-inject. Fails open on any error.
+  """
+  import sys
+
+  try:
+    event = json.loads(sys.stdin.read() or "{}")
+  except Exception:
+    sys.exit(0)
+
+  config = load_config()
+  if config.get("auto_inject") is False:
+    sys.exit(0)
+
+  tool_input = event.get("tool_input") or {}
+  file_path = (
+    tool_input.get("file_path")
+    or tool_input.get("path")
+    or tool_input.get("notebook_path")
+    or ""
+  )
+  if not isinstance(file_path, str) or not file_path:
+    sys.exit(0)
+
+  cwd = event.get("cwd") or ""
+  vault_dir = Path(config.get("vault_dir") or DEFAULT_VAULT_DIR)
+  throttle_path = vault_dir / "file_context_throttle.json"
+
+  try:
+    from agentvault.core.store import VaultStore
+    from agentvault.hooks.file_context import build_file_context
+    store = VaultStore(persist_dir=config.get("chromadb_dir"))
+    block = build_file_context(
+      file_path=file_path,
+      cwd=cwd,
+      store=store,
+      throttle_path=throttle_path,
+    )
+  except Exception:
+    sys.exit(0)
+
+  if not block:
+    sys.exit(0)
+
+  output = {
+    "hookSpecificOutput": {
+      "hookEventName": "PreToolUse",
+      "additionalContext": block,
+    }
+  }
+  print(json.dumps(output))
+
+
 @cli.command(name="mcp-install")
 def mcp_install():
   """Install AgentVault MCP server + auto-save + context-injection hooks."""
@@ -856,6 +958,15 @@ def mcp_install():
     _install_session_start_hook()
     console.print(
       "    [green]\u2713[/green] Claude Code SessionStart hook installed"
+    )
+  except Exception as e:
+    console.print(f"    [yellow]![/yellow] {e}")
+
+  console.print("\n  [bold]Installing file-context hook:[/bold]")
+  try:
+    _install_file_context_hook()
+    console.print(
+      "    [green]\u2713[/green] Claude Code PreToolUse hook installed"
     )
   except Exception as e:
     console.print(f"    [yellow]![/yellow] {e}")
