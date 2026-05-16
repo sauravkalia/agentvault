@@ -191,6 +191,24 @@ def _get_tools() -> list[dict]:
         },
       },
     },
+    {
+      "name": "vault_todos",
+      "description": "Find TODOs and 'we should…' notes from past AI conversations, with a resolution heuristic that marks a TODO done when a later session in the same project mentions wrapping it up. Use when the user asks 'what was I supposed to come back to?', 'any open TODOs in this project?', or before starting fresh work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Filter TODOs to a single project",
+          },
+          "only_unresolved": {
+            "type": "boolean",
+            "description": "Skip TODOs that look resolved (default: false)",
+            "default": False,
+          },
+        },
+      },
+    },
   ]
 
 
@@ -375,6 +393,19 @@ class MCPServer:
           self.store, project=project, min_sessions=min_sessions,
         )
         text = format_patterns_text(patterns)
+
+      elif tool_name == "vault_todos":
+        from agentvault.core.todos import find_todos, format_todos_text
+
+        project = args.get("project")
+        if project:
+          _validate_string(project, "project", max_length=200)
+        only_unresolved = bool(args.get("only_unresolved", False))
+
+        todos = find_todos(
+          self.store, project=project, only_unresolved=only_unresolved,
+        )
+        text = format_todos_text(todos)
 
       elif tool_name == "vault_decisions":
         from agentvault.core.decisions import Decision, extract_decisions

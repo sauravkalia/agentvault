@@ -1,6 +1,19 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.12.0**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.12.1**.
+
+---
+
+## v0.12.1 — Stale-TODO extractor (✅ shipped 2026-05-16)
+
+Companion to v0.12.0's pattern intelligence. Surfaces unresolved "we should…" / TODO / FIXME / "come back to" notes from past chats with a resolution heuristic so the user sees what they actually still owe themselves.
+
+- New `agentvault/core/todos.py`: regex set for TODO/FIXME/XXX/we-should/come-back-to/let's-add/would-be-nice/need-to/gonna/add-X-later phrasings. Each match's body is captured, trimmed, deduped within-chunk via Jaccard ≥ 0.7.
+- Two-pass resolution: chunks are sorted by timestamp; for each TODO, scan only later chunks in the **same project** for a done-flavor line (added / fixed / shipped / completed / implemented / landed / merged / finished / resolved / wrapped up / took care of) whose content tokens Jaccard ≥ 0.4 with the TODO's tokens. First match wins.
+- CLI: `agentvault todos [--project X] [--unresolved] [--top N]` — rich table with status column.
+- MCP tool: `vault_todos(project?, only_unresolved?)`.
+- `chunk_limit=5000` keeps the scan bounded on large vaults.
+- Obsidian weekly digest deferred — easy follow-up if it proves useful.
 
 ---
 
@@ -74,18 +87,7 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v0.12.1 — Stale-TODO extractor (next)
-
-**Goal:** surface unresolved "I'll come back to X" / "TODO: X" / "we should X" / "let's add later" from past chats, scoped to the current project.
-
-- Regex + light NLP over chunk content; capture the TODO text, project, timestamp, session.
-- Resolution heuristic: extract a 2–4 word noun phrase from each TODO; mark resolved when a later chunk in the same project mentions that phrase in a "done"-flavor context (added / fixed / shipped / completed). Crude but workable for v1.
-- CLI: `agentvault todos [--project X] [--unresolved]`.
-- Optional weekly digest written to Obsidian.
-
----
-
-## v0.13.0 — Web viewer
+## v0.13.0 — Web viewer (next)
 
 **Goal:** a localhost UI to browse/search/filter the vault — what claude-mem does. Obsidian is great for read; web is better for cross-project search.
 

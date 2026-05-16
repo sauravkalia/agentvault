@@ -1085,6 +1085,58 @@ def decisions(project: str | None, export_path: str | None):
 
 @cli.command()
 @click.option("--project", "-p", type=str, default=None, help="Filter by project")
+@click.option(
+  "--unresolved", is_flag=True, default=False,
+  help="Only show TODOs not yet resolved",
+)
+@click.option("--top", "top_n", type=int, default=50, help="Max TODOs to show")
+def todos(project: str | None, unresolved: bool, top_n: int):
+  """Surface TODOs and 'we should…' notes from past conversations."""
+  from agentvault.core.store import VaultStore
+  from agentvault.core.todos import find_todos
+
+  store = VaultStore()
+  results = find_todos(
+    store, project=project, only_unresolved=unresolved, top_n=top_n,
+  )
+
+  if not results:
+    msg = "open TODOs" if unresolved else "TODOs"
+    console.print(f"\n  No {msg} found.\n")
+    return
+
+  open_n = sum(1 for t in results if not t.resolved)
+  done_n = len(results) - open_n
+  title = (
+    f"TODOs — {open_n} open"
+    + ("" if unresolved else f", {done_n} resolved")
+  )
+
+  table = Table(title=title)
+  if not unresolved:
+    table.add_column("Status", style="bold")
+  table.add_column("Date", style="dim")
+  table.add_column("Project", style="cyan")
+  table.add_column("TODO")
+  for t in results:
+    text = t.text
+    if len(text) > 100:
+      text = text[:100] + "…"
+    row: list[str] = []
+    if not unresolved:
+      row.append("[green]done[/green]" if t.resolved else "[yellow]open[/yellow]")
+    row.append(t.date or "?")
+    row.append(t.project or "?")
+    row.append(text)
+    table.add_row(*row)
+
+  console.print()
+  console.print(table)
+  console.print()
+
+
+@cli.command()
+@click.option("--project", "-p", type=str, default=None, help="Filter by project")
 @click.option("--min-sessions", type=int, default=3, help="Minimum sessions per cluster")
 @click.option("--top", "top_n", type=int, default=20, help="Max clusters to show")
 def patterns(project: str | None, min_sessions: int, top_n: int):

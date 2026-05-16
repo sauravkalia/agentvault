@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentvault-memory"
-version = "0.12.0"
+version = "0.12.1"
 description = "Unified memory layer that consolidates history from all your AI coding agents — searchable by humans (Obsidian) and by AI (MCP)."
 readme = "README.md"
 license = "MIT"
@@ -52,6 +52,7 @@ select = ["E", "F", "I", "W"]
 [tool.ruff.lint.per-file-ignores]
 # Regex patterns and MCP tool descriptions can't be broken across lines
 "agentvault/core/redactor.py" = ["E501"]
+"agentvault/core/todos.py" = ["E501"]
 "agentvault/mcp_server.py" = ["E501"]
 
 [tool.setuptools.packages.find]
