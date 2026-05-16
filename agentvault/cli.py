@@ -223,6 +223,7 @@ def cli():
 @click.option("--obsidian", type=click.Path(), default=None, help="Path to your Obsidian vault")
 def init(obsidian: str | None):
   """Initialize AgentVault and auto-detect AI tools."""
+  from agentvault.adapters.aider import AiderAdapter
   from agentvault.adapters.claude_code import ClaudeCodeAdapter
   from agentvault.adapters.codex import CodexAdapter
   from agentvault.adapters.cursor import CursorAdapter
@@ -241,6 +242,7 @@ def init(obsidian: str | None):
     OpenCodeAdapter(),
     CodexAdapter(),
     CursorAdapter(),
+    AiderAdapter(),
   ]
 
   console.print("\n  [bold]Detecting AI tools:[/bold]")
@@ -340,6 +342,7 @@ def init(obsidian: str | None):
 @click.option("--max-tokens", type=int, default=800, help="Max tokens per chunk")
 def ingest(source: str | None, max_tokens: int):
   """Ingest conversation history from detected AI tools."""
+  from agentvault.adapters.aider import AiderAdapter
   from agentvault.adapters.claude_code import ClaudeCodeAdapter
   from agentvault.adapters.codex import CodexAdapter
   from agentvault.adapters.cursor import CursorAdapter
@@ -356,6 +359,7 @@ def ingest(source: str | None, max_tokens: int):
     OpenCodeAdapter(),
     CodexAdapter(),
     CursorAdapter(),
+    AiderAdapter(),
   ]
   if source:
     adapters = [a for a in adapters if a.name == source]
@@ -430,6 +434,7 @@ def ingest(source: str | None, max_tokens: int):
 @click.option("--source", type=str, default=None, help="Only sync specific source")
 def sync(source: str | None):
   """Incremental sync — only ingest new sessions since last run."""
+  from agentvault.adapters.aider import AiderAdapter
   from agentvault.adapters.claude_code import ClaudeCodeAdapter
   from agentvault.adapters.codex import CodexAdapter
   from agentvault.adapters.cursor import CursorAdapter
@@ -447,6 +452,7 @@ def sync(source: str | None):
     OpenCodeAdapter(),
     CodexAdapter(),
     CursorAdapter(),
+    AiderAdapter(),
   ]
   if source:
     adapters = [a for a in adapters if a.name == source]

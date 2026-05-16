@@ -39,6 +39,7 @@ def get_default_config() -> dict[str, Any]:
       "cursor": {"enabled": True, "history_path": None},
       "chatgpt": {"enabled": False, "history_path": None},
       "codex": {"enabled": True, "history_path": None},
+      "aider": {"enabled": True, "history_path": None},
     },
     "auto_sync": False,
     "auto_inject": True,

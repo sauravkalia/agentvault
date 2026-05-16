@@ -1,6 +1,17 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.9.0**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.10.0**.
+
+---
+
+## v0.10.0 — Aider adapter (✅ shipped 2026-05-16)
+
+Adds Aider — the second-most-used AI coding CLI — as a first-class source.
+
+- New `AiderAdapter` parses per-project `.aider.chat.history.md` files. Aider has no central history dir, so `discover_sessions` walks from `history_path` (default: `~`) with a depth cap and a prune list (`node_modules`, `.git`, `Library`, dot-dirs, etc.) so the walk doesn't grind through caches.
+- Multi-line user messages (contiguous `#### ` lines) are joined into one human exchange. `> Applied edit to <path>` notices become `edit_file` ToolCalls on the preceding assistant turn and populate `files_touched`. Other `> ...` system lines are dropped.
+- One file = one `AgentSession`. Aider re-uses one file across many sessions, so all chats in the file are concatenated under the latest header's timestamp; `started_at`/`ended_at` span the full file.
+- Auto-detected in `agentvault init`, picked up by `agentvault ingest` and `agentvault sync`. Source label `aider` flows through `vault_status` / `vault_wake_up` automatically.
 
 ---
 
@@ -35,19 +46,7 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v0.10.0 — Aider adapter (next)
-
-**Goal:** add the second-most-used AI coding CLI as a first-class source.
-
-- Parse Aider's chat history (markdown + JSON sidecar) from `~/.aider/` or per-project `.aider.chat.history.md`.
-- Map Aider's user/assistant turns + file edits into the existing `Chunk` schema.
-- Add `agentvault ingest --source aider`.
-- `agentvault init` auto-detects Aider installation.
-- New source label `aider` shown in `vault_status` / `vault_wake_up`.
-
----
-
-## v0.11.0 — Per-file context (PreToolUse hook)
+## v0.11.0 — Per-file context (PreToolUse hook, next)
 
 **Goal:** when Claude is about to read/edit a file, surface what was previously discussed about that file.
 
