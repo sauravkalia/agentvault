@@ -1,6 +1,23 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.12.1**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.13.0**.
+
+---
+
+## v0.13.0 — Web viewer (✅ shipped 2026-05-16)
+
+Localhost UI to browse / search / filter the vault — what claude-mem does. Obsidian is good for read-only browsing, web is better for cross-project search and following session/project links.
+
+- New CLI: `agentvault serve [--host 127.0.0.1] [--port 3777]`. Binds to loopback by default so the viewer never accidentally goes onto the network.
+- Routes (FastAPI, inline HTML rendered with `html.escape`, no Jinja dep):
+  - `GET /` — stats summary + nav + inline search box.
+  - `GET /search?q=...&project=...` — hybrid search (mode=hybrid from v0.9.0), results as cards.
+  - `GET /projects` — project list with chunk counts.
+  - `GET /projects/{name}` — recent activity, open TODOs, recurring problems (lower `min_sessions=2` for narrower per-project view).
+  - `GET /sessions/{id}` — every chunk for one session, ordered by `chunk_index`.
+  - `GET /api/stats` — JSON stats endpoint for ad-hoc scripts.
+- Optional install: `pip install agentvault-memory[ui]` adds `fastapi` + `uvicorn` only. The core install stays slim.
+- Tests use `fastapi.testclient.TestClient` and a `FakeStore`; module is `pytest.importorskip`-gated so the suite still runs cleanly when the extras aren't installed.
 
 ---
 
@@ -87,21 +104,7 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v0.13.0 — Web viewer (next)
-
-**Goal:** a localhost UI to browse/search/filter the vault — what claude-mem does. Obsidian is great for read; web is better for cross-project search.
-
-- New CLI: `agentvault serve [--port 3777]` — embedded FastAPI/Starlette server.
-- Pages:
-  - Search (FTS5 + vector, per-project filter, date range)
-  - Project view (timeline + decisions + recurring patterns)
-  - Session detail (full chunks, tool calls, file edits)
-- Stats dashboard: chunks/sessions/sources, hit-rate, token savings.
-- Single-binary launch: `pip install agentvault-memory[ui]` adds the small extra dep set.
-
----
-
-## v0.14.0 — Self-improvement
+## v0.14.0 — Self-improvement (next)
 
 **Goal:** make the harness learn from observed user behavior.
 

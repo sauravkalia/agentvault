@@ -1084,6 +1084,26 @@ def decisions(project: str | None, export_path: str | None):
 
 
 @cli.command()
+@click.option("--host", type=str, default="127.0.0.1", help="Host to bind")
+@click.option("--port", type=int, default=3777, help="Port to bind")
+def serve(host: str, port: int):
+  """Launch a local web viewer for your AgentVault Memory."""
+  try:
+    from agentvault.web import run
+  except ImportError:
+    console.print(
+      "\n  [yellow]![/yellow] Web viewer deps not installed. "
+      "Run [bold]pip install agentvault-memory[ui][/bold] to enable.\n"
+    )
+    return
+  console.print(
+    f"\n  Serving AgentVault Memory at "
+    f"[bold]http://{host}:{port}[/bold]  (Ctrl-C to stop)\n"
+  )
+  run(host=host, port=port)
+
+
+@cli.command()
 @click.option("--project", "-p", type=str, default=None, help="Filter by project")
 @click.option(
   "--unresolved", is_flag=True, default=False,
