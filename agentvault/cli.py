@@ -1083,5 +1083,46 @@ def decisions(project: str | None, export_path: str | None):
     console.print(f"  [green]\u2713[/green] Exported to {export_path}\n")
 
 
+@cli.command()
+@click.option("--project", "-p", type=str, default=None, help="Filter by project")
+@click.option("--min-sessions", type=int, default=3, help="Minimum sessions per cluster")
+@click.option("--top", "top_n", type=int, default=20, help="Max clusters to show")
+def patterns(project: str | None, min_sessions: int, top_n: int):
+  """Surface recurring problems across your past AI sessions."""
+  from agentvault.core.patterns import find_patterns
+  from agentvault.core.store import VaultStore
+
+  store = VaultStore()
+  results = find_patterns(
+    store, project=project, min_sessions=min_sessions, top_n=top_n,
+  )
+
+  if not results:
+    console.print(
+      "\n  No recurring problems found "
+      f"(threshold: {min_sessions} sessions).\n"
+    )
+    return
+
+  table = Table(title=f"Recurring problems (≥ {min_sessions} sessions)")
+  table.add_column("Sessions", justify="right")
+  table.add_column("Span", style="dim")
+  table.add_column("Projects", style="cyan")
+  table.add_column("Example")
+  for p in results:
+    first = (p.first_seen or "")[:10]
+    last = (p.last_seen or "")[:10]
+    span = f"{first} → {last}" if first and last and first != last else (last or first or "?")
+    projs = ", ".join(sorted(p.projects)) or "?"
+    example = p.example
+    if len(example) > 100:
+      example = example[:100] + "…"
+    table.add_row(str(p.session_count), span, projs, example)
+
+  console.print()
+  console.print(table)
+  console.print()
+
+
 if __name__ == "__main__":
   cli()

@@ -1,6 +1,20 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.11.0**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.12.0**.
+
+---
+
+## v0.12.0 — Recurring-problem detector (✅ shipped 2026-05-16)
+
+Surfaces problems the user has debugged multiple times across past sessions. Pattern intelligence shipped as two releases per the one-feature-per-release principle — patterns now (v0.12.0), stale-TODO extractor next (v0.12.1).
+
+- New `agentvault/core/patterns.py`: regex-based problem-line detection (errors / exceptions / "doesn't work" / tracebacks / 5xx / etc.) + content-token extraction (stopword-stripped, ≥3 chars, ≥3 tokens per line).
+- **Greedy single-link clustering by Jaccard similarity** (threshold 0.5). Each cluster keeps its growing union token-set as the centroid so vocabulary drift across descriptions still merges. Strict set-equality was tried first and over-discriminates real-world phrasing.
+- Within-chunk dedupe: a chunk mentioning the same problem 5 times counts as one occurrence in that chunk's session (otherwise a single noisy chunk could fake a 3-session pattern).
+- Threshold: clusters with `session_count >= min_sessions` (default 3) qualify.
+- CLI: `agentvault patterns [--project X] [--min-sessions N] [--top N]` — rich table output.
+- MCP tool: `vault_patterns(project?, min_sessions?)`.
+- `chunk_limit=5000` cap on the scan so the command stays snappy on a 50k-chunk vault; raise via the function arg if needed.
 
 ---
 
@@ -60,16 +74,14 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v0.12.0 — Pattern intelligence (next)
+## v0.12.1 — Stale-TODO extractor (next)
 
-**Goal:** surface patterns across sessions, not just retrieve them.
+**Goal:** surface unresolved "I'll come back to X" / "TODO: X" / "we should X" / "let's add later" from past chats, scoped to the current project.
 
-- **Recurring-problem detector**: cluster chunks by content fingerprint + project; flag any cluster with ≥3 occurrences across ≥3 sessions. Output: "you've debugged 'undefined redirect' 4 times — last fix was on 2026-04-21."
-  - CLI: `agentvault patterns [--project X]`
-  - MCP tool: `vault_patterns`
-- **Stale-TODO extractor**: regex + light NLP for "I'll come back to", "TODO:", "we should", "let's add later"; mark resolved when the same project sees a follow-up commit/discussion mentioning the same noun phrase.
-  - CLI: `agentvault todos [--unresolved]`
-  - Optional weekly digest written to Obsidian.
+- Regex + light NLP over chunk content; capture the TODO text, project, timestamp, session.
+- Resolution heuristic: extract a 2–4 word noun phrase from each TODO; mark resolved when a later chunk in the same project mentions that phrase in a "done"-flavor context (added / fixed / shipped / completed). Crude but workable for v1.
+- CLI: `agentvault todos [--project X] [--unresolved]`.
+- Optional weekly digest written to Obsidian.
 
 ---
 

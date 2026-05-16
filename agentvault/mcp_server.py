@@ -173,6 +173,24 @@ def _get_tools() -> list[dict]:
         "properties": {},
       },
     },
+    {
+      "name": "vault_patterns",
+      "description": "Surface recurring problems across past AI sessions — problems the user has debugged multiple times. Use when the user is starting a new debugging session, complaining a bug 'keeps happening', or asking what they've struggled with most.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Filter clusters to a single project",
+          },
+          "min_sessions": {
+            "type": "integer",
+            "description": "Minimum number of distinct sessions for a cluster to qualify (default: 3)",
+            "default": 3,
+          },
+        },
+      },
+    },
   ]
 
 
@@ -339,6 +357,24 @@ class MCPServer:
           f"  Projects: {', '.join(stats['projects']) or 'none'}\n"
           f"  Sources: {', '.join(stats['sources']) or 'none'}"
         )
+
+      elif tool_name == "vault_patterns":
+        from agentvault.core.patterns import find_patterns, format_patterns_text
+
+        project = args.get("project")
+        if project:
+          _validate_string(project, "project", max_length=200)
+
+        min_sessions = args.get("min_sessions", 3)
+        try:
+          min_sessions = max(2, min(int(min_sessions), 20))
+        except (TypeError, ValueError):
+          min_sessions = 3
+
+        patterns = find_patterns(
+          self.store, project=project, min_sessions=min_sessions,
+        )
+        text = format_patterns_text(patterns)
 
       elif tool_name == "vault_decisions":
         from agentvault.core.decisions import Decision, extract_decisions
