@@ -1,6 +1,18 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.8.1**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.9.0**.
+
+---
+
+## v0.9.0 — Hybrid search (✅ shipped 2026-05-16)
+
+Closes the keyword-recall gap with claude-mem so exact strings (function names, error codes, file paths) land cleanly.
+
+- New `FTSIndex` (SQLite FTS5, BM25) lives at `<persist_dir>/fts.sqlite`, mirrored on every `add_chunks` write.
+- `VaultStore.search(mode=...)` now supports `"semantic"` (Chroma only), `"keyword"` (FTS5 only), and `"hybrid"` (default). Hybrid runs both backends in parallel, min-max normalizes each, and combines via weighted sum (default `semantic_weight=0.5`, tunable).
+- Lazy migration backfills FTS5 from Chroma on first hybrid/keyword search if it's behind — idempotent, one-shot per process.
+- All `delete_*` paths propagate to FTS5.
+- `vault_search`, `vault_search_lite`, `vault_project_context`, `vault_cross_reference` default to hybrid. `vault_decisions` stays semantic (its synthetic query is decision-phrasing, not literal tokens).
 
 ---
 
@@ -23,23 +35,7 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v0.9.0 — Search quality (next)
-
-**Goal:** close the keyword-search gap with claude-mem so exact strings (function names, error codes, file paths) land cleanly.
-
-- Add SQLite FTS5 index alongside ChromaDB. On every `add_chunks` write to both stores.
-- New `VaultStore.search(mode="hybrid")` that:
-  - Runs FTS5 (BM25) and Chroma (cosine) in parallel
-  - Normalizes scores (z-score or min-max)
-  - Combines with weighted sum (default 0.5/0.5; tunable)
-  - Deduplicates and re-ranks
-- Migration: lazy-build FTS5 from existing chunks on first hybrid search; idempotent.
-- Update `vault_search` and `vault_search_lite` to default to hybrid.
-- Tests: keyword-only queries (e.g., `useAuthProvider`) should beat semantic-only on exact matches.
-
----
-
-## v0.10.0 — Aider adapter
+## v0.10.0 — Aider adapter (next)
 
 **Goal:** add the second-most-used AI coding CLI as a first-class source.
 

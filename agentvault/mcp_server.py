@@ -60,7 +60,7 @@ def _get_tools() -> list[dict]:
   return [
     {
       "name": "vault_search",
-      "description": "Semantic search across all AI agent conversation history. Use this to find past decisions, debugging sessions, code discussions, and anything discussed in previous sessions.",
+      "description": "Hybrid search (semantic + keyword/BM25) across all AI agent conversation history. Use this to find past decisions, debugging sessions, code discussions, exact function names, error codes, or file paths discussed in previous sessions.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -130,7 +130,7 @@ def _get_tools() -> list[dict]:
     },
     {
       "name": "vault_search_lite",
-      "description": "Token-efficient search — returns short summaries instead of full content. Use this first, then vault_search for details on specific results. Saves ~80% tokens.",
+      "description": "Token-efficient hybrid search (semantic + keyword) — returns short summaries instead of full content. Use this first, then vault_search for details on specific results. Saves ~80% tokens.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -238,6 +238,7 @@ class MCPServer:
           project=project,
           source=source,
           min_relevance=DEFAULT_MIN_RELEVANCE,
+          mode="hybrid",
         )
         text = self._format_search_results(results)
 
@@ -251,6 +252,7 @@ class MCPServer:
           query=query, top_k=8, project=project,
           min_relevance=DEFAULT_MIN_RELEVANCE,
           time_decay=True,
+          mode="hybrid",
         )
         text = self._format_search_results(results)
 
@@ -259,6 +261,7 @@ class MCPServer:
         results = self.store.search(
           query=query, top_k=10,
           min_relevance=DEFAULT_MIN_RELEVANCE,
+          mode="hybrid",
         )
         text = self._format_search_results(results)
 
@@ -273,6 +276,7 @@ class MCPServer:
           query=query, top_k=top_k, project=project,
           min_relevance=DEFAULT_MIN_RELEVANCE,
           time_decay=True,
+          mode="hybrid",
         )
         results = dedup_results(results)
 
@@ -345,7 +349,10 @@ class MCPServer:
           _validate_string(project, "project", max_length=200)
 
         query = "decided chose going with will use agreed switching plan recommend"
-        results = self.store.search(query=query, top_k=30, project=project)
+        # Decision extraction relies on semantic phrasing, not keyword match.
+        results = self.store.search(
+          query=query, top_k=30, project=project, mode="semantic",
+        )
 
         all_decisions: list[Decision] = []
         seen: set[str] = set()
