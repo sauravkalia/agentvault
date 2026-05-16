@@ -209,6 +209,24 @@ def _get_tools() -> list[dict]:
         },
       },
     },
+    {
+      "name": "vault_rules",
+      "description": "Surface repeated user corrections from past AI sessions — candidate rules the user might want to promote into a CLAUDE.md / system prompt. Use proactively when starting work in a project: a recurring 'don't / always / never / use X instead' from past chats is often something the user wants you to honor.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Filter to a single project",
+          },
+          "min_occurrences": {
+            "type": "integer",
+            "description": "Minimum distinct sessions for a candidate (default: 3)",
+            "default": 3,
+          },
+        },
+      },
+    },
   ]
 
 
@@ -406,6 +424,24 @@ class MCPServer:
           self.store, project=project, only_unresolved=only_unresolved,
         )
         text = format_todos_text(todos)
+
+      elif tool_name == "vault_rules":
+        from agentvault.core.rules import find_rules, format_rules_text
+
+        project = args.get("project")
+        if project:
+          _validate_string(project, "project", max_length=200)
+
+        min_occurrences = args.get("min_occurrences", 3)
+        try:
+          min_occurrences = max(2, min(int(min_occurrences), 20))
+        except (TypeError, ValueError):
+          min_occurrences = 3
+
+        rules = find_rules(
+          self.store, project=project, min_occurrences=min_occurrences,
+        )
+        text = format_rules_text(rules)
 
       elif tool_name == "vault_decisions":
         from agentvault.core.decisions import Decision, extract_decisions

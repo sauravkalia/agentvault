@@ -862,6 +862,20 @@ def inject_context():
   }
   print(json.dumps(output))
 
+  # Best-effort injection log for future calibration via `agentvault tune`.
+  try:
+    from agentvault.hooks.injection_log import record_injection
+    log_path = Path(config.get("vault_dir") or DEFAULT_VAULT_DIR) / "injection_log.jsonl"
+    record_injection(
+      log_path,
+      prompt=prompt,
+      project=project,
+      session_id=current_session,
+      chunk_ids=[(r.get("id") or "") for r in results],
+    )
+  except Exception:
+    pass
+
 
 @cli.command(name="file-context")
 def file_context():
@@ -1153,6 +1167,50 @@ def todos(project: str | None, unresolved: bool, top_n: int):
   console.print()
   console.print(table)
   console.print()
+
+
+@cli.command()
+@click.option("--project", "-p", type=str, default=None, help="Filter by project")
+@click.option(
+  "--min-occurrences", type=int, default=3,
+  help="Minimum distinct sessions for a candidate",
+)
+@click.option("--top", "top_n", type=int, default=20, help="Max candidates to show")
+def rules(project: str | None, min_occurrences: int, top_n: int):
+  """Surface repeated corrections from past sessions — candidate CLAUDE.md rules."""
+  from agentvault.core.rules import find_rules
+  from agentvault.core.store import VaultStore
+
+  store = VaultStore()
+  results = find_rules(
+    store, project=project, min_occurrences=min_occurrences, top_n=top_n,
+  )
+  if not results:
+    console.print(
+      f"\n  No repeated corrections found (threshold: {min_occurrences} sessions).\n"
+    )
+    return
+
+  table = Table(title=f"Candidate rules (≥ {min_occurrences} sessions)")
+  table.add_column("Count", justify="right")
+  table.add_column("Span", style="dim")
+  table.add_column("Projects", style="cyan")
+  table.add_column("Example")
+  for c in results:
+    first = (c.first_seen or "")[:10]
+    last = (c.last_seen or "")[:10]
+    span = f"{first} → {last}" if first and last and first != last else (last or first or "?")
+    projs = ", ".join(sorted(c.projects)) or "?"
+    example = c.example
+    if len(example) > 100:
+      example = example[:100] + "…"
+    table.add_row(str(c.occurrence_count), span, projs, example)
+
+  console.print()
+  console.print(table)
+  console.print(
+    "\n  Promote any of these to your CLAUDE.md to make them stick.\n"
+  )
 
 
 @cli.command()

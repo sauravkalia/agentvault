@@ -1,6 +1,18 @@
 # AgentVault Memory — Roadmap
 
-Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.13.0**.
+Sequenced rollout of upcoming features. Each release is independently shippable, reversible, and small enough to validate before moving on. Current version: **v0.14.0**.
+
+---
+
+## v0.14.0 — Rule suggestions + injection log (✅ shipped 2026-05-16)
+
+Two pieces of the original "self-improvement" plan. The third — `agentvault tune` — needs more data to be useful, so it's deferred; the injection log starts collecting that data now.
+
+- **Rule suggestion** (`agentvault/core/rules.py`): regex set for `don't / never / always / stop doing / use X instead / prefer X over Y / avoid / make sure / I told you / remember to`. Greedy Jaccard clustering at threshold 0.4 (looser than patterns.py because corrective phrasings have more verb-conjugation noise). Any cluster spanning ≥ `min_occurrences` distinct sessions surfaces as a candidate the user might want to lift into CLAUDE.md.
+- CLI: `agentvault rules [--project X] [--min-occurrences N] [--top N]` — rich table.
+- MCP tool: `vault_rules(project?, min_occurrences?)` — agents can fetch likely-honored conventions before starting work.
+- **Injection log** (`agentvault/hooks/injection_log.py`): every `UserPromptSubmit` injection appends one JSON line to `~/.agentvault/injection_log.jsonl` with `ts`, `prompt_hash` (SHA-1, first 16 chars — never plaintext), `project`, `session_id`, `chunk_ids`. Best-effort, fails open, capped at 1000 lines via prune-on-write. Forms the dataset for a future `agentvault tune` command.
+- `tune` itself deferred — needs evidence of which injected chunks were actually referenced by the assistant, which requires either a Stop hook that scans output or per-tool integration. Out of scope for v0.14.
 
 ---
 
@@ -104,17 +116,7 @@ Full content remains queryable via ChromaDB. Existing oversized files in the vau
 
 ---
 
-## v0.14.0 — Self-improvement (next)
-
-**Goal:** make the harness learn from observed user behavior.
-
-- **Skill / CLAUDE.md rule suggestion**: detect when the user repeats the same correction 3+ times across sessions (e.g., "don't add Co-Authored-By", "use 2-space indent"). Surface a one-liner: "Promote to CLAUDE.md? `agentvault promote-rule <id>`".
-- **Hit-rate telemetry (local-only)**: track which injected contexts were referenced in subsequent assistant output. Tune `MIN_RELEVANCE` per-user from real data instead of the 0.35 default.
-- **Feedback loop**: `agentvault tune` runs a calibration pass on the last N injections and writes recommended thresholds to config.
-
----
-
-## v1.0.0 — Scale & polish
+## v1.0.0 — Scale & polish (next)
 
 **Goal:** everything that has to be true to call this 1.0.
 
