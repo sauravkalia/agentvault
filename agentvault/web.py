@@ -238,22 +238,43 @@ def _projects(store: Any) -> str:
 
 
 def _project_detail(store: Any, name: str) -> str:
-  # Recent activity via project-context style search.
+  # Recent activity: pull this project's chunks directly from Chroma and
+  # sort by timestamp desc. No synthetic search query — avoids the case
+  # where the embedding/FTS pipeline returns 0 hits even though the data
+  # is in the store.
   try:
-    hits = store.search(
-      query=f"recent work on {name}",
-      top_k=10, project=name, mode="hybrid",
-      time_decay=True,
+    raw = store.collection.get(
+      where={"project": name},
+      limit=200,
+      include=["documents", "metadatas"],
     )
   except Exception:
-    hits = []
+    raw = {"ids": [], "documents": [], "metadatas": []}
 
-  if not hits:
+  ids = raw.get("ids", []) or []
+  if not ids:
     body = (
       f"<h2>{html.escape(name)}</h2>"
       "<p class='empty'>No activity indexed for this project.</p>"
     )
     return _layout(name, body)
+
+  docs = raw.get("documents", []) or []
+  metas = raw.get("metadatas", []) or []
+  hits = []
+  for i, cid in enumerate(ids):
+    meta = metas[i] if i < len(metas) else {}
+    hits.append({
+      "id": cid,
+      "content": docs[i] if i < len(docs) else "",
+      "metadata": meta,
+      "distance": None,
+    })
+  hits.sort(
+    key=lambda h: (h.get("metadata") or {}).get("timestamp", ""),
+    reverse=True,
+  )
+  hits = hits[:10]
 
   # Patterns & decisions, both heuristic — fail open.
   try:
